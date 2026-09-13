@@ -1,0 +1,4283 @@
+/*
+ * Design tokens. Transcribed VERBATIM from the preceding application's measured values — the
+ * inventory was captured as "verbatim values (preserve exactly)", and transcribing rather than
+ * re-deriving them is the point: a token re-eyeballed is a token that drifts.
+ *
+ * Verbatim is the instruction and it is load-bearing. §C exists because the inherited design
+ * language is the one part of the old app that was unambiguously good, and the failure mode it
+ * guards against is a builder "improving" a value in passing — a slightly bluer teal, a slightly
+ * whiter white — until the thing that felt expensive feels generic. Every hex below is copied, not
+ * chosen. Where the annex says normalize rather than preserve, the note says so.
+ *
+ * TWO RULES FROM THE ANNEX THAT ARE EASY TO LOSE:
+ *   - **Base weight 300** — "the single biggest contributor to the expensive feel."
+ *   - **`text.primary` is a warm off-white, never `#fff`.** The annex says "never #fff" in as many
+ *     words, so it is written here as a rule rather than as a value that happens not to be white.
+ *
+ * And one product decision, recorded because it is easy to violate accidentally:
+ * **zero emoji anywhere in the UI** — an explicit v1.0.0 decision, not a stylistic preference.
+ */
+
+/*
+ * THE BOX MODEL, SET ONCE. Added 2026-08-12, and it should have been the first line of this file.
+ *
+ * Without it, `width: 100%` means *the content box is 100% of the parent* — so any element with
+ * padding or a border overflows its container by exactly that padding and border. The operator found it
+ * from the outside: Projects → + Plan, where *"there's padding to the left side but there's no
+ * padding to the right side of those boxes."*
+ *
+ * Measured before the fix, against the modal's content box:
+ *
+ *     .modal-input      left 0px    right −21.2px     (0.6rem × 2 + 2px)
+ *     .modal-textarea   left 0px    right −18px       (8px × 2 + 2px)
+ *
+ * The arithmetic lands exactly on the padding, which is what identifies it as the box model rather
+ * than a spacing mistake in either rule. Four elements were affected: `.modal-input`,
+ * `.modal-textarea`, `.row-menu-item` and `.board-filter-field`.
+ *
+ * **Applied alone, ahead of P11's new UI, deliberately.** P11 builds a filter bar, a quick-open
+ * panel and a first-run card — three boxes with padding. Building them against the wrong box model
+ * means compensating for it in every new rule and unpicking that later. It also means that if this
+ * moves something unexpected, it moves in one commit rather than inside a feature.
+ *
+ * What it changes elsewhere, measured rather than assumed: every element carrying a border becomes
+ * 2px narrower, because the border now counts inside the width. Nothing else moves.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* --- Colour: backgrounds ------------------------------------------------------------- */
+  --bg-primary: #1c1b1a;          /* sidebar, headers, toolbars, modals, board columns */
+  --bg-secondary: #242322;        /* app canvas, editor surface, cards, inputs */
+  --bg-tertiary: #1a1918;         /* code blocks, table headers, tag pills */
+  --bg-hover: #2c2b29;            /* row/button hover */
+  --bg-selected: #2a2926;         /* selected file row */
+  --bg-selected-accent: #252320;  /* selected item in pickers */
+  --bg-surface: #282826;          /* floating: menus, toasts, popovers */
+
+  /* --- Colour: text ------------------------------------------------------------------- */
+  --text-primary: #ece9e1;        /* warm off-white — NEVER #fff */
+  --text-secondary: #a09d95;
+  --text-muted: #8a877f;
+  --text-dim: #5e5c57;            /* paths, counts, captions */
+
+  /* --- Colour: borders ---------------------------------------------------------------- */
+  --border-primary: #2f2e2b;      /* every hairline */
+  --border-secondary: #262523;
+
+  /* --- Colour: accent ----------------------------------------------------------------- */
+  --accent-teal: #5b9fa6;
+  --accent-teal-dim: #4a8389;
+  --accent-teal-soft: rgba(91, 159, 166, 0.1);
+
+  /* --- Colour: status ----------------------------------------------------------------- */
+  --status-active: #34d399;
+  --status-complete: #60a5fa;
+  --status-paused: #d4a84b;
+  --status-draft: #9a9893;
+  --status-saving: #5b9fa6;
+  --status-saved: #34d399;
+
+  /* Lane dots. Named `lane-*` after the annex's own labels; the soil's lanes are §3's grammar. */
+  --lane-todo: #60a5fa;
+  --lane-doing: #d4a84b;
+  --lane-done: #34d399;
+  --lane-fallback: var(--text-dim);
+
+  /* --- Colour: priority ramp ---------------------------------------------------------- */
+  --priority-critical: #ef4444;
+  --priority-high: #f59e0b;
+  --priority-medium: var(--text-secondary);
+  --priority-low: var(--text-dim);
+
+  /* --- Colour: miscellaneous ---------------------------------------------------------- */
+  --danger-hover: #e57373;
+  --inline-code-text: #c4b5a0;    /* warm tan */
+  --emphasis: #c0bdb5;
+
+  /* --- Type ---------------------------------------------------------------------------- */
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  /*
+   * **The editor's face, and only the editor's.** The operator brought Open Sans into the repo on
+   * 2026-08-23 after comparing the two side by side: it is what Typora's GitHub theme asks for, and
+   * the sizes had already been matched exactly without closing the gap they were pointing at.
+   *
+   * **Scoped to the editing surface deliberately.** The tree, the boards and the chrome were styled
+   * against the system face and they approved them that way; changing every surface at once would be
+   * answering a question nobody asked.
+   *
+   * **The system stack stays behind it as a fallback that actually works.** If the font fails — a
+   * blocked request, a bad content type, a stale cache — the editor renders exactly as it did
+   * yesterday rather than dropping to something ugly.
+   */
+  --font-editor: "Open Sans", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  /*
+   * **THIS STACK HAD NO GENERIC FALLBACK, AND SO NOTHING IN THE APP WAS MONOSPACED.**
+   *
+   * Measured 2026-08-26 in a browser, chasing the operator's *"the code block looks shitty"*: five `i`
+   * glyphs came to 21.9px and five `M` glyphs to 71.4px in the code face. A monospaced font gives
+   * the same number twice. It was falling all the way through to the document's default serif.
+   *
+   * The old value was `"SF Mono", "JetBrains Mono", "Fira Code"` and every name in it is a miss:
+   * **SF Mono is not exposed to web content** under that name — it is a system-restricted face —
+   * and the other two are developer installs this machine does not have. With no generic at the
+   * end, the browser had nowhere to go.
+   *
+   * Sixteen places in the app read this token, so it was not only the code block: inline code, the
+   * tables that were supposed to line up by character width, and every monospaced surface in the
+   * chrome. **The tables never aligned because the font never arrived**, and no amount of
+   * `tabular-nums` can rescue a proportional face.
+   *
+   * `ui-monospace` and `SFMono-Regular` are the names by which the system face IS reachable;
+   * `Menlo` ships on every Mac; `monospace` is the backstop that makes the whole stack unable to
+   * fail this way again. `editor-font.spec.ts` now measures the result rather than the request.
+   */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, "JetBrains Mono", monospace;
+
+  /* Base weight 300 — the annex calls this the single biggest contributor to the expensive feel. */
+  --weight-base: 300;
+  --weight-content: 400;
+  --weight-emphasis: 500;         /* emphasis / active / headers */
+  --weight-strong: 600;           /* ONLY prose h1 and strong */
+
+  /* Size ladder, in rem, exactly as the annex lists it. */
+  --size-glyph: 0.58rem;          /* glyphs, footers */
+  --size-tag: 0.60rem;            /* tag pills */
+  --size-micro: 0.62rem;          /* micro-labels, paths */
+  --size-badge: 0.65rem;
+  --size-chip: 0.68rem;           /* chips, buttons, table headers */
+  --size-menu: 0.70rem;           /* menus, folder rows, back */
+  --size-menu-alt: 0.72rem;
+  --size-context-menu: 0.75rem;   /* context menus, table body */
+  --size-toast: 0.78rem;          /* toast, board title */
+  --size-row: 0.80rem;            /* file rows, card titles */
+  --size-view-title: 0.82rem;     /* view titles, empty states */
+  --size-editor-filename: 0.85rem;
+  --size-modal-input: 0.88rem;
+  --size-editor-body: 0.90rem;
+  --size-modal-title: 0.95rem;
+  --size-wordmark: 1.00rem;
+
+  /* Letter-spacing. */
+  --ls-prose: -0.008em;           /* prose, editor body */
+  --ls-row: -0.01em;              /* rows, filename, back */
+  --ls-h2: -0.015em;
+  --ls-h1: -0.02em;
+  --ls-wordmark: -0.025em;
+  --ls-section-label: 0.01em;
+  --ls-count: 0.02em;
+
+  /* --- Radii ---------------------------------------------------------------------------- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* --- Shadows -------------------------------------------------------------------------- */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);   /* menus, toasts */
+  --shadow-xl: 0 16px 56px rgba(0, 0, 0, 0.4);  /* slide-over */
+  /*
+   * The annex records that modals hard-code `0 8px 40px .6` with r12, and says explicitly:
+   * "normalize to tokens, don't preserve." So there is deliberately no --shadow-modal here —
+   * modals use --shadow-xl and --radius-md. This is the one place §C tells us NOT to transcribe,
+   * and it is noted rather than silently obeyed so nobody later "restores" the original.
+   */
+
+  /* --- Motion --------------------------------------------------------------------------- */
+  --motion-button: 0.15s;
+  --motion-row-bg: 0.12s;
+  --motion-chevron: 0.15s;
+  --motion-sidebar: 0.2s;
+  --motion-slide-over: 0.18s;
+  --motion-card-border: 0.15s;
+  --motion-toast: 0.2s;           /* fadeInUp, translateY 8px, X-centered */
+
+  /* --- Chrome --------------------------------------------------------------------------- */
+  --scrollbar-width: 6px;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.14);
+  --scrollbar-radius: 99px;
+  --selection-bg: rgba(91, 159, 166, 0.3);
+
+  --drag-over-fill: rgba(91, 159, 166, 0.06);
+  --drag-over-border: rgba(91, 159, 166, 0.3);
+  --dragging-opacity: 0.4;
+
+  --backdrop: rgba(0, 0, 0, 0.5);
+  --backdrop-blur: 4px;
+
+  /* --- Layout constants ----------------------------------------------------------------- */
+  --sidebar-width: 272px;
+  --sidebar-width-collapsed: 44px;
+  /*
+   * **The rail's LIVE width, and the single number every pane insets against.** The two above are
+   * the endpoints; this is whichever one is in force, swapped by `data-rail` further down.
+   *
+   * One variable rather than repeating the condition on each pane: a `.tasks-pane` that missed the
+   * collapsed case would sit 272px from an edge the rail had already left, and the gap would be
+   * empty screen nothing draws in.
+   */
+  --rail-width: var(--sidebar-width);
+  --sidebar-top-pad: 42px;
+  --tree-bottom-pad: 120px;
+  --nav-bar-height: 36px;
+  --measure: 720px;
+  /*
+   * 288px, not 280 — the packet puts the lane on its 4px grid, and it stays inside the annex's
+   * 260–320 range. Changed 2026-08-15 with the design pass.
+   */
+  --lane-width: 288px;
+
+  /*
+   * Padding after the LAST lane, so its quick-add is never clipped against the viewport edge. The
+   * board's own `padding-inline-end` was 14px and a scrolled-to-end board cut the control off.
+   */
+  --board-tail: 24px;            /* range 260–320 */
+  --lane-width-min: 260px;
+  --lane-width-max: 320px;
+  /*
+   * §4.1: 70% → 45%, and **it had to land in the same unit as the rail**, which is the packet's own
+   * reasoning: the percentage is measured against the pane, and the pane just lost 272px to the
+   * sidebar. At 70% of a 1008px board the panel is 560px of it, and `card-panel.spec.ts` caught
+   * that in WebKit — the second card sat underneath the open panel and a click on it was
+   * intercepted for thirty seconds. The board narrowed; the thing covering it had to as well.
+   *
+   * It is also the desktop half of the operator's number-one complaint about the panel's size. On a
+   * phone the panel is not a panel at all — see `is-fullscreen-phone`.
+   */
+  --slide-over-width: min(560px, 45%);
+  --modal-wide: 580px;
+  --modal-medium: 520px;
+  --modal-small: 360px;
+  --modal-narrow: 400px;
+  --modal-max-height: 85vh;
+
+  /* --- Z-order -------------------------------------------------------------------------- */
+  --z-sticky-header: 1;
+  --z-slide-over: 40;
+  --z-file-action-dropdown: 50;
+  --z-context-menu: 60;
+  --z-modal: 100;                 /* modals and toast share this layer */
+
+  /*
+   * --- Editor typography -------------------------------------------------------------------
+   *
+   * **Taken from Typora's GitHub theme, read off the copy on the user's Mac rather than recalled.**
+   * 2026-08-22, on comparing the two side by side: *"Typora is so fucking clean, dude… side by side
+   * it's much bigger. I wish I could just have the UI/UX I have in my current Typora."*
+   *
+   * | | was | GitHub theme |
+   * |---|---|---|
+   * | body | 0.90rem (14.4px) | **16px** |
+   * | line height | 1.78 | **1.6** |
+   * | h1 | 1.5rem (24px) | **2.25em (36px)** |
+   * | h2 | 1.2rem | **1.75em** |
+   * | h3 | 1.02rem | **1.5em** |
+   * | list indent | 1.5em (24px) | **30px** |
+   *
+   * **The headings were the real gap** — an h1 barely larger than body text is why the document read
+   * as flat. The theme's own proportions are kept rather than averaged towards what was here.
+   *
+   * **The font is NOT copied.** The theme asks for Open Sans, which Typora bundles and macOS does
+   * not have; matching it means shipping a font file, which is a decision rather than a pass. The
+   * system face stays, and it is the same family Apple Notes uses — the size and weight were doing
+   * the damage, not the typeface.
+   */
+  --editor-line-height: 1.6;
+  --editor-p-margin-bottom: 0.8em;
+  --editor-h1-size: 2.25em;
+  --editor-h2-size: 1.75em;
+  --editor-h3-size: 1.5em;
+  --editor-h4-size: 1.25em;
+  --editor-heading-margin: 1rem;
+  --editor-list-padding-left: 30px;
+  --editor-li-line-height: 1.6;
+  /* The theme's own measure, and the editor's alone — `--measure` is shared with other surfaces. */
+  --editor-measure: 860px;
+  --editor-code-bg: rgba(255, 255, 255, 0.06);
+  /*
+   * **Code sits ON the page, not in a hole cut out of it.** Ruled 2026-08-22: *"the black box
+   * looks weird and small and maybe too gray — the gray is too dark."*
+   *
+   * It used `--bg-tertiary`, which is **darker** than the editor surface, so a code block read as a
+   * well sunk into the document. Typora's GitHub theme does the opposite: its block is `#f8f8f8` on
+   * a white page — all but flush — and the separation is done by a **1px border**, not by contrast.
+   *
+   * Translated to a dark ground that means lifting slightly rather than sinking, and letting the
+   * border do the work. The size follows the theme too: 0.9em, where this was 0.85 and the
+   * frontmatter 0.8.
+   */
+  --editor-code-surface: #2c2b29;
+  --editor-code-size: 0.9em;
+  --editor-blockquote-border: 4px;
+}
+
+/*
+ * The selected row's 2px teal left border, with a TRANSPARENT 2px on unselected rows.
+ *
+ * The annex specifies the transparent counterpart explicitly, and the reason is worth keeping: a
+ * border that appears on selection shifts every row by two pixels as the selection moves. Reserving
+ * the space is the difference between a list that feels solid and one that twitches.
+ */
+:root {
+  --selected-border-width: 2px;
+  --selected-border: var(--accent-teal);
+  --unselected-border: transparent;
+
+  /*
+   * The touch floor for a row in a DENSE, SCROLLING LIST — the tree, below the breakpoint.
+   *
+   * **40, not §18.6's 44, and that is the ruling rather than a rounding.** 2026-08-13, having
+   * used it on their phone: rows were 23 px and unhittable, went to 44, and *"height is just a bit too
+   * tall, maybe take it down 10%."* 44 x 0.9 = 39.6.
+   *
+   * **This is knowingly under Apple's 44 pt guidance and under this build's own spec**, recorded as a
+   * reduction in `open-items.md` rather than absorbed. The trade they are making is density: a tree is
+   * the surface you scroll for a long time, and every pixel of row height is a file you cannot see.
+   *
+   * **The 44 elsewhere is deliberately NOT changed to match, and the distinction is the consequence
+   * of a mis-tap.** In the `⋯` sheet and on a board card, the neighbouring item MOVES A FILE. In the
+   * tree, the neighbour opens the wrong document — recoverable, and nothing on disk changes. Density
+   * is worth buying there and is not worth buying in a menu.
+   *
+   * One number, one place: the row and the control on it both read this, so they cannot drift apart
+   * and quietly reinstate a floor nobody chose.
+   */
+  --touch-row-min: 40px;
+
+  /* ==========================================================================
+   * DESIGN PASS — direction 1a, "Left Rail". Claude Design packet, 2026-08-15.
+   * Step 1 of its build order: add the variables, change nothing visually.
+   *
+   * **Only the genuinely new families are here.** The packet also proposes a new
+   * size ladder and a new touch-row floor. Those are NOT additions — they are
+   * different values for concepts this file already names, and adding them
+   * alongside would leave two tokens for one decision, drifting apart, which is
+   * the failure the annex §C rules exist to prevent. They land with the screens
+   * that change, and the collision is recorded in the build notes.
+   * ========================================================================== */
+
+  /*
+   * CARD LIFT — the whole "alive" treatment, per the packet.
+   *
+   * An inset top hairline in text-primary at low alpha. Values are the packet's,
+   * expressed against the text colour they are derived from rather than as raw
+   * greys, so a palette change carries them.
+   */
+  --lift-top: rgba(236, 233, 225, 0.05);
+  --lift-top-hover: rgba(236, 233, 225, 0.08);
+  --lift-top-raised: rgba(236, 233, 225, 0.07);
+
+  /*
+   * MONOGRAM TINTS — inbox source marks. Four buckets, chosen from the folder
+   * name by the hash the chatroom already uses for author colours; the packet is
+   * explicit that this reuses that rule rather than inventing a second one.
+   *
+   * Each pair is an EXISTING hue at 14% over `--bg-primary`, so nothing here is a
+   * new colour — `--mono-fg-1` is `--accent-teal`, 2 is `--status-paused`, 3 is
+   * `--status-complete`, 4 is `--status-active`. Written as literals because §C's
+   * rule is that a token file states its values.
+   */
+  --mono-bg-1: rgba(91, 159, 166, 0.14);
+  --mono-fg-1: #5b9fa6;
+  --mono-bg-2: rgba(212, 168, 75, 0.14);
+  --mono-fg-2: #d4a84b;
+  --mono-bg-3: rgba(96, 165, 250, 0.14);
+  --mono-fg-3: #60a5fa;
+  --mono-bg-4: rgba(52, 211, 153, 0.14);
+  --mono-fg-4: #34d399;
+
+  /*
+   * SPACING — a 4px grid, and the first one this file has had. Every gap and pad
+   * in the packet is one of these. The gaps in the scale (7, 9, 12, 13) are the
+   * packet's: it names only the steps it uses, so an unused step cannot become a
+   * habit.
+   */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-11: 44px;
+  --space-14: 56px;
+
+  /*
+   * TOUCH FLOORS — named so they can be asserted rather than remembered.
+   *
+   * `--touch-row` is deliberately ABSENT. The packet sets it to 44px for tree
+   * rows; this file already has `--touch-row-min: 40px` carrying that decision,
+   * with a comment recording that one number in one place is the point. Raising
+   * the floor is a real change to a control WCAG 2.5.8 is measured against, so it
+   * goes through the row work with a test, not in silently as a new name.
+   */
+  --touch-chip: 40px;
+  --touch-menu: 52px;
+  --fab-size: 56px;
+}
+
+/*
+ * A47: the background is painted `#1c1b1a` BEFORE FIRST PAINT — "kills white flash".
+ *
+ * The P3 review found the app loading white: `tokens.css` defined custom properties and nothing
+ * applied any of them, so the built stylesheet was 2.9 KB of variables that painted nothing. A
+ * token nobody applies is the same shape as a limit that exists only as a number.
+ *
+ * Written as a literal rather than `var(--bg-primary)` on purpose. This rule has to hold before
+ * the custom properties are guaranteed resolved, and a flash of white on every load is precisely
+ * what the annex names. The value is duplicated from `--bg-primary` above and must move with it.
+ */
+/*
+ * **OPEN SANS, SERVED BY US — never fetched from Google.**
+ *
+ * The policy this app sets is `default-src 'none'` with `font-src 'self'`, so a webfont linked from
+ * anywhere else is blocked outright. Self-hosting is not a preference here; it is the only way a
+ * font loads at all — and it is also what makes the editor look the same on their phone, offline, and
+ * on a machine that has never seen the internet.
+ *
+ * **Three files, not the thirty in the download.** The editor asks for 400 and 600, plus italic for
+ * emphasis. The rest of Google's package — every condensed and semi-condensed width — is weight
+ * nothing uses, and a repository carries what it ships forever.
+ *
+ * **`swap`, so text is never invisible.** The fallback renders immediately and is replaced when the
+ * font arrives; `block` would give a blank editor for up to three seconds on a cold phone.
+ *
+ * Licensed under the SIL Open Font License, whose terms require the licence to travel with the
+ * files: `public/fonts/OFL.txt`.
+ */
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Open Sans";
+  src: url("/fonts/OpenSans-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  background-color: #1c1b1a;
+}
+
+html,
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-system);
+  font-weight: var(--weight-base);
+  letter-spacing: var(--ls-prose);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--selection-bg);
+}
+
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* A34 — the focus ring, applied globally to form controls as the annex specifies. */
+:where(input, textarea, select, button):focus-visible {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+/* ==================================================================================== *
+ * THE FILES TAB — P7. The tree on the left, the editor on the right.
+ *
+ * Sizes come from the annex's ladder (§C, verbatim): 0.72rem folder rows, 0.80rem file rows,
+ * 0.62rem micro-labels and paths. Colours are the tokens above; nothing here invents one.
+ * ==================================================================================== */
+
+/*
+ * **THE RAIL.** Packet §4.1 — the app's own sidebar, a sibling of every pane rather than a column
+ * inside one of them.
+ *
+ * It carries the width; `.files-sidebar` inside it fills it. That split is deliberate: the rail is
+ * the only thing that knows how wide the app's left edge is, so the collapse in a later unit is one
+ * number in one place, and the panes inset against the same token they are told to clear.
+ *
+ * `z-index: 1` keeps it under the tab bar's 2 — the bar spans the full width and the rail starts
+ * below it, so they do not overlap today, but a rail that could rise over the bar is a rail that
+ * will the first time either one's box changes.
+ */
+.app-rail {
+  position: absolute;
+  /*
+   * **Full height, because there is no longer a strip above it.** The tabs are inside the rail now,
+   * so the band that used to run across the top of the app is gone on a desktop and the rail owns
+   * the whole left edge from the top of the window down.
+   */
+  inset: 0 auto 0 0;
+  width: var(--rail-width);
+  transition: width var(--motion-sidebar) ease;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-primary);
+  border-inline-end: 1px solid var(--border-primary);
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------------------
+ * The rail's header block — §4.1, and the reference app's own values.
+ *
+ * `flex-shrink: 0` so a deep tree scrolling underneath can never squeeze the app's name out of
+ * existence; the tree is the element that takes the overflow, exactly as it does for Settings.
+ * ------------------------------------------------------------------------- */
+
+.rail-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 16px 14px;
+  border-block-end: 1px solid var(--border-primary);
+}
+
+/*
+ * **The only teal wordmark in the app, and the only place the product names itself.** The reference
+ * app's negative tracking is what stops the two words reading as unrelated at this size.
+ */
+.rail-wordmark {
+  font-size: var(--size-wordmark);
+  font-weight: 500;
+  letter-spacing: var(--ls-wordmark);
+  color: var(--accent-teal);
+}
+
+.rail-workspaces {
+  margin-block-start: 3px;
+  font-size: var(--size-micro);
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
+.rail-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/*
+ * The search control and the gear. Outlined rather than filled: §4.1 gives the app exactly one
+ * filled button, and it is `+ New`. A second one would make neither of them mean anything — and a
+ * search that shouted louder than the gear beside it would be that second one.
+ *
+ * **One rule for both**, so the pair cannot drift apart by a pixel of padding. They sit side by side
+ * and any difference between them reads as a mistake rather than a distinction.
+ */
+.rail-search,
+.rail-gear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.rail-search:hover,
+.rail-gear:hover { color: var(--text-secondary); }
+
+.rail-search:focus-visible,
+.rail-gear:focus-visible,
+.rail-collapse:focus-visible {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+.rail-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.rail-collapse:hover { color: var(--text-secondary); }
+
+/* ---------------------------------------------------------------------------
+ * COLLAPSED — §4.1: *"44px holding only the expand chevron, centred, 22px down. Nothing else
+ * survives; the tabs do not become icons."*
+ *
+ * **Scoped away from the phone.** The attribute lives on the root and survives a resize, and at
+ * phone width the rail has no box to collapse — but `.tabs` and `.files-sidebar` are still on
+ * screen there. Without the `:not()` a rail collapsed on a desktop and then dragged narrow would
+ * take the phone's navigation and file tree with it.
+ * ------------------------------------------------------------------------- */
+
+:root[data-rail='collapsed'] { --rail-width: var(--sidebar-width-collapsed); }
+
+:root:not([data-layout='mobile'])[data-rail='collapsed'] .rail-identity,
+:root:not([data-layout='mobile'])[data-rail='collapsed'] .rail-search,
+:root:not([data-layout='mobile'])[data-rail='collapsed'] .rail-gear,
+:root:not([data-layout='mobile'])[data-rail='collapsed'] .tabs,
+:root:not([data-layout='mobile'])[data-rail='collapsed'] .files-sidebar,
+:root:not([data-layout='mobile'])[data-rail='collapsed'] .status {
+  display: none;
+}
+
+:root:not([data-layout='mobile'])[data-rail='collapsed'] .rail-header {
+  justify-content: center;
+  padding: 22px 0 0;
+  border-block-end: 0;
+}
+
+/* The one control turns around rather than being swapped for its mirror. */
+:root[data-rail='collapsed'] .rail-collapse svg { transform: rotate(180deg); }
+
+/*
+ * **A phone never collapses.** §4.1 gives it no sidebar to collapse, and the control lives in the
+ * rail header, which is already hidden there — this states the intent rather than relying on that.
+ */
+:root[data-layout='mobile'] .rail-collapse { display: none; }
+
+/*
+ * **ONE WAY INTO SETTINGS AT EACH WIDTH.**
+ *
+ * The gear is the desktop's. The phone keeps the strip above its tab bar, which the operator ruled and
+ * tested — *"I'm ok with it on bottom viewable in files screen as is as long as it doesn't get
+ * cutoff"* — and which this unit does not touch. Two controls in the markup, never two on a screen,
+ * and both press the same button: see `settingsDoor` in `main.tsx`.
+ *
+ * The rail header as a whole is desktop-only. §4.1 gives the phone a title block instead, and it
+ * has no sidebar for this to sit at the top of.
+ */
+:root[data-layout='mobile'] .rail-header { display: none; }
+
+:root:not([data-layout='mobile']) .sidebar-strip { display: none; }
+
+/*
+ * **Every pane starts where the rail ends, and none of them starts below a top strip any more.**
+ *
+ * This is the layout change: the rail is permanent, so the boards inset against it exactly as Files
+ * does. `--nav-bar-height` is gone from the top of both because the bar it named is now a band
+ * inside the rail rather than a strip across the window.
+ */
+.files-pane {
+  position: absolute;
+  inset: 0 0 0 var(--rail-width);
+  display: flex;
+  min-height: 0;
+}
+
+/*
+ * §18.4 — on a phone you are in the tree or in the document, never both.
+ *
+ * Hidden with `display: none`, not unmounted. That is what makes "back puts you where you were"
+ * structural: the tree keeps its scroll position, its open folders and its selected row because it
+ * was never taken apart. A rebuild-on-back would need all three kept in step by hand.
+ *
+ * Desktop never matches this block, so both halves stay side by side above 768 px.
+ */
+/*
+ * **Read off the root, not off the pane — because the two halves no longer share a parent.**
+ *
+ * The tree is in the rail and the document is in the pane, so a descendant selector can no longer
+ * reach both. `data-files-screen` is set by the same call that sets `data-screen`, so this is one
+ * fact published where both elements can read it rather than two facts that could disagree.
+ *
+ * **The sidebar is what hides, not the rail.** The rail holds the tab bar now, and a phone with no
+ * tab bar has no navigation at all — see `.app-rail`'s `display: contents` below. The other half of
+ * this pair, hiding the tree, lives with those rules.
+ */
+:root[data-layout='mobile'][data-files-screen='tree'] .files-main {
+  display: none;
+}
+
+:root[data-layout='mobile'] .files-main {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: none;
+}
+
+/*
+ * **ON A PHONE THE RAIL IS NOT A BOX AT ALL.**
+ *
+ * §4.1 gives the phone no sidebar. But the tab bar lives in the rail now, and on a phone that bar is
+ * pinned across the bottom of the screen — so the rail cannot simply be hidden, or navigation would
+ * go with it.
+ *
+ * `display: contents` removes the rail's box and leaves its children where they were: the tab bar
+ * lays out against the viewport as it always did, and the tree becomes a screen in its own right.
+ * **Nothing is re-parented to achieve that**, which matters because the layout can flip live on a
+ * window drag, and moving the tree would cost its scroll position, its open folders and its
+ * selected row — the three things §18.4 keeps by never taking it apart.
+ *
+ * `position: static` is restated because a positioned element with `display: contents` is a
+ * contradiction worth not relying on any particular engine to resolve.
+ */
+:root[data-layout='mobile'] .app-rail {
+  position: static;
+  display: contents;
+}
+
+/*
+ * With the rail's box gone, the tree needs its own — it is the whole screen on the tree half of
+ * §18.4, and absent everywhere else. **The `data-tab` half is what keeps it off the board**: the
+ * rail is permanent on a desktop, so nothing hides it per tab any more, and on a phone that job
+ * moved here.
+ */
+:root[data-layout='mobile'] .files-sidebar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: var(--bg-primary);
+  /*
+   * **Above the panes, and this is not cosmetic.** The sidebar used to be INSIDE `.files-pane`;
+   * promoting it made it a sibling that comes EARLIER in the DOM, so at equal z-index the pane paints
+   * over it. On a phone the pane is `inset: 0` and its only child is hidden on the tree screen — an
+   * empty full-screen box sitting on top of the tree, swallowing every tap.
+   *
+   * It cost 32 browser tests, all of them timing out on a click that Playwright reported as
+   * *"visible, enabled and stable"*. Nothing was wrong with the element; something was in front of
+   * it. On a desktop it never bit, because there the rail and the pane do not overlap.
+   *
+   * Under `.tabs`, which is 2 — the bar must stay reachable over the tree.
+   */
+  z-index: 1;
+}
+
+:root[data-layout='mobile']:not([data-tab='files']) .files-sidebar,
+:root[data-layout='mobile'][data-files-screen='document'] .files-sidebar {
+  display: none;
+}
+
+/*
+ * The way back. Present only on the document screen of a phone — on the desktop the tree is right
+ * there, so a control pointing at it would be furniture with nothing to do.
+ *
+ * It names its destination rather than being a bare chevron: on a phone the tree is off screen, and
+ * an arrow alone is a promise about somewhere you cannot see.
+ */
+.files-screen-back { display: none; }
+
+:root[data-layout='mobile'] .files-pane[data-screen='document'] .files-screen-back {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 20;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  font-family: var(--font-system);
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 0;
+  border-block-end: 1px solid var(--border-primary);
+  width: 100%;
+}
+
+/* The document starts below the back control rather than underneath it. */
+:root[data-layout='mobile'] .files-pane[data-screen='document'] .files-main {
+  padding-block-start: 44px;
+}
+
+.files-sidebar {
+  /*
+   * **The rail owns the width now; this fills it.** A9's 272px still exists — it is
+   * `--sidebar-width` on `.app-rail` — but naming it twice would mean a collapse that has to be
+   * kept in step in two places, which is the shape of every drift this stylesheet has had.
+   */
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  /*
+   * A column, so Settings can sit at the foot of it.
+   *
+   * The scroll moved from here to `.tree` when Settings arrived (2026-08-09). With `overflow: auto`
+   * on the sidebar itself, the button scrolled away with the tree — findable only by scrolling a
+   * deep tree to its end, which on this file tree is a long way. The tree takes the overflow; the
+   * button stays put.
+   */
+  display: flex;
+  flex-direction: column;
+  /*
+   * **The background and the right-hand hairline moved to `.app-rail`**, which is the element that
+   * now spans the app's whole left edge. Left here they would draw a second border partway down it,
+   * under the tabs, wherever this box happens to start.
+   */
+  padding-block: 0.5rem;
+}
+
+.files-sidebar > .tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.files-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+}
+
+/*
+ * §4.2's empty pane: centred, max 340px. Narrower than the 32rem it replaces — a single line of
+ * text stretched across half a window reads as a broken layout rather than as a state.
+ */
+.files-placeholder {
+  margin: auto;
+  padding: 2rem;
+  max-width: 340px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.files-placeholder-title {
+  font-size: var(--size-modal-title);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* The action, dim, under the state. Two weights of information, two treatments. */
+.files-placeholder-line {
+  margin-block-start: 0.35rem;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+}
+
+/* --- the tree ---------------------------------------------------------------------- */
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  /* `padding-inline-start` is set per row for the indent; this is the rest of the box. */
+  padding-block: 0.18rem;
+  padding-inline-end: 0.6rem;
+  cursor: default;
+  user-select: none;
+  /*
+   * ==================================================================================
+   * **MIRRORED FROM THE REFERENCE APP, EXACTLY.** Ruled 2026-08-16:
+   *
+   *   "look at the Soil Viewer, the reference app — just look at their tokens on the file tree.
+   *    It's perfect, that's what I want. I want that matching color. They have different colors for
+   *    the files and the folders. They have a different color than we have right now, which is a
+   *    little more grayed out, which looks a lot better. So just mirror that exactly."
+   *
+   * The reference app's own file-tree values:
+   *
+   *   | row              | size     | colour           | weight |
+   *   |------------------|----------|------------------|--------|
+   *   | folder           | 0.75rem  | text.secondary   | 500    |
+   *   | file, editable   | 0.80rem  | text.muted       | 400    |
+   *   | file, other      | 0.80rem  | text.dim         | 400    |
+   *   | selected         | —        | text.primary     | 500    |
+   *
+   * plus `letter-spacing: -0.01em` on both.
+   *
+   * **WE HAD IT BACKWARDS.** Folders were `--text-primary` — the brightest thing in the app — and
+   * files were `--text-secondary`. The the reference app does the opposite: folders sit at secondary and
+   * files are dimmer still, so the eye reads structure first and the names recede until you want
+   * them. That inversion is the "more grayed out" they are describing, and it is why our tree looked
+   * louder than their.
+   *
+   * The palette itself needed nothing — `#ece9e1`, `#a09d95`, `#8a877f`, `#5e5c57` are already
+   * byte-identical in both apps. Only the assignment was wrong.
+   *
+   * **This also reverts the size bump from earlier today.** They asked for one size bigger, then saw
+   * it and ruled: *"the file names can remain smaller."* 0.80/0.75 is the reference app's own pair,
+   * and it is one step UP for folders (from 0.72) and back to where files were.
+   * ==================================================================================
+   */
+  color: var(--text-dim);
+  font-size: 0.80rem;
+  /*
+   * **400, stated — the reference app sets it too.** Its shell is `fontWeight: 300`, exactly like
+   * this app's `--weight-base`, and its file rows override to 400. Inheriting 300 here would make
+   * the names a shade lighter than the thing being mirrored, which is the whole subject of the
+   * request. `--weight-content`, which is that value named.
+   */
+  font-weight: var(--weight-content);
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/*
+ * A document. The the reference app's `editable` — everything it can open in its editor — which here is
+ * `isMarkdown`. Anything else stays at `--text-dim`, so a `.png` reads as quieter than a note
+ * without needing a word to say so.
+ */
+.tree-row.is-document { color: var(--text-muted); }
+
+.tree-row-folder {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/*
+ * §18.6's 44 pt floor, applied to the tree — the one touch surface that never had it.
+ *
+ * **Found on a real phone, on the first tailnet run** (ruled 2026-08-13): *"the lines are very
+ * small and hard to click on."* Measured at 375 px before anything was changed: rows were **23 px**
+ * and the `⋯` was **12.8 × 22.7 px**, against §18.6's *"Row targets ≥ 44 pt."*
+ *
+ * **The board card's menu already carried this floor and the tree did not** — and the e2e case that
+ * asserts a thumb can hit things only ever covered the bottom sheet's items, so nothing in the suite
+ * was looking at the tree. That is why a real device found it and 250 browser tests did not.
+ *
+ * `min-height` rather than extra padding, so the per-row `padding-inline-start` that draws the
+ * indent is untouched — the indent arithmetic is load-bearing for depth and must not move.
+ *
+ * The type goes up one modest step with it. The operator asked for *"a tiny bit larger"*, and a 44 px row
+ * wrapped around 11.5 px text reads as a gap with a label in it rather than a row.
+ */
+:root[data-layout='mobile'] .tree-row {
+  min-height: var(--touch-row-min);
+  gap: 0.5rem;
+  font-size: 0.86rem;
+}
+
+:root[data-layout='mobile'] .tree-row-folder { font-size: 0.80rem; }
+
+/*
+ * **The phone keeps its own SIZES and takes the reference app's COLOURS.**
+ *
+ * The two overrides above exist because the operator used the app on a real phone and said *"the lines
+ * are very small and hard to click on"* — 0.80/0.75 is a desktop app's ladder and putting it on a
+ * 390px screen would undo that finding. Colour is not a touch question, so the mirrored assignment
+ * above applies at both widths without a rule here.
+ */
+
+/*
+ * The control has to be thumb-sized itself, not merely sit inside a row that is.
+ *
+ * **Its height tracks the row's floor and its width does not.** A `min-height` above the row's would
+ * hold every row open to the button's size, which is how the row floor would silently stop being the
+ * row floor. Width stays at the full 44: horizontal room is free here — the button is right-aligned
+ * against the edge with nothing beside it — so there is no reason to spend the accuracy.
+ */
+:root[data-layout='mobile'] .row-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: var(--touch-row-min);
+}
+
+/* ---------------------------------------------------------------------------
+ * THE SELECTION MODEL — packet §4.6, and the defect the operator reported:
+ *
+ *   "the last picked file also stays highlighted while the one you're picking 3 dots on also is
+ *    highlighted."
+ *
+ * **Three states, three treatments that cannot be mistaken for each other.**
+ *
+ * | state      | means                          | treatment                              |
+ * |------------|--------------------------------|----------------------------------------|
+ * | open       | this file is in the editor     | 2px teal left border + selected ground |
+ * | acted on   | this row's ⋯ menu is up        | hover ground, and nothing else         |
+ * | focused    | the keyboard is here           | teal ring, `:focus-visible` only       |
+ *
+ * They used to be two, and both were a background wash: *open* was `--bg-selected` and *acted on*
+ * was whatever `:hover` gave you. Two rows lit the same way with no way to tell which was which —
+ * and on a phone there is no hover at all, so the row a menu belonged to was marked by nothing.
+ *
+ * **The border is the thing that separates them**, not a darker grey. A ground can be confused with
+ * another ground; an edge marker cannot be confused with a fill.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * **Every row reserves the 2px, always.** Adding a border only to the open row would shift its label
+ * two pixels right at the moment of opening — a whole tree twitching around the thing you clicked.
+ */
+.tree-row {
+  border-inline-start: 2px solid transparent;
+}
+
+.tree-row:hover { background: var(--bg-hover); }
+
+/* *Acted on*: the ground only. Deliberately the same wash as hover — it IS "the pointer is here",
+ * held on after the pointer leaves, which is exactly what it means on a phone where there is none. */
+.tree-row.has-menu { background: var(--bg-hover); }
+
+/* *Open*: the marker. `--bg-selected-accent` is a shade under the old `--bg-selected`, because the
+ * border now carries the signal and the ground no longer has to shout. */
+.tree-row.is-selected {
+  background: var(--bg-selected-accent);
+  border-inline-start-color: var(--accent-teal);
+  /* The the reference app's selected row: `text.primary` and weight 500, at both kinds of row. */
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/*
+ * *Focused*: the ring, and `:focus-visible` rather than `:focus` so a mouse click never draws it.
+ * Third treatment, third mechanism — a row can legitimately be all three at once and still read as
+ * one row: teal edge, hover ground, ring.
+ */
+.tree-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent-teal);
+}
+
+/*
+ * The twisty is fixed-width so every label in a column starts at the same x — a ragged left edge is
+ * what makes a deep tree hard to scan. A file gets a blank of the same width for that reason, even
+ * though it has nothing to disclose.
+ *
+ * **`.tree-glyph` is gone.** It drew a second `▸` on every folder row beside the twisty's — the
+ * double arrow the operator reported — and `·` or `□` on every file, saying "document" on a screen where
+ * nearly everything is one. §4.2: *"one mark per folder, not two."*
+ */
+.tree-twisty {
+  flex: 0 0 auto;
+  width: 0.9em;
+  text-align: center;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * §4.2's type, in dim caps at the end of the row. It replaces a leading box glyph with a word, and
+ * a word says what the box could not: `XLSX` tells you what clicking will do.
+ *
+ * `margin-inline-start: auto` puts it against the `⋯` rather than beside the name, so a column of
+ * them lines up and a long filename truncates into its own space instead of pushing it off the row.
+ */
+.tree-type {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding-inline-start: 0.4rem;
+  font-size: var(--size-micro);
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+/* A file whose bytes are not on this machine (§5's cloud placeholder) is dimmed, and SAYS so. */
+.tree-row.is-unavailable .tree-label { color: var(--text-dim); }
+
+.tree-note {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding-inline-start: 0.5rem;
+  font-size: 0.62rem;   /* micro-label */
+  color: var(--text-dim);
+}
+
+.tree-note-error { color: var(--status-paused); }
+
+.tree-empty {
+  padding: 0.75rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+/* --- the non-editing pane: images, PDFs, read-only text, and "cannot be shown" ------- */
+
+.pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/*
+ * **Two rows, always: the title line, then the path under it.** Ruled 2026-08-15 — *"move the
+ * filepath under the title, it's cramming up with the copy path button and disrupts the whole
+ * header section."*
+ *
+ * A column rather than a wrapping row. Wrapping is what the card panel used to do, and it made the
+ * header's shape a function of the filename's length: a short name kept everything on one line, a
+ * long one pushed the path down. Two rows by construction cannot do that.
+ */
+.pane-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0.75rem 1.25rem;
+  border-block-end: 1px solid var(--border-primary);
+}
+
+.pane-header-top {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/*
+ * The name takes the room and yields when there is none; Copy Path is pushed to the right (A14).
+ *
+ * **The name is the element that can afford to truncate.** It is the file's own title, restated as
+ * the document's first heading directly below and recoverable from the tree. The path no longer
+ * competes with it for width at all — it has its own row — which is what retired the pair of
+ * competing `flex` rules that used to live here and the 40% cap that went with them.
+ */
+.pane-header .pane-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-path {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding: 0.25rem 0.6rem;
+  font-family: var(--font-system);
+  font-size: 0.68rem;   /* the ladder's button size */
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  cursor: default;
+}
+
+.copy-path:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* A14's editor header sizes: the name at 0.85rem, the path in dim micro-type at 0.62rem. */
+.pane-name { font-size: 0.85rem; color: var(--text-primary); }
+/*
+ * The document header's path. **One line, at every width, structurally.**
+ *
+ * `nowrap` is the guarantee and `ellipsis` is the courtesy: `headerPath` has already cut the string
+ * to two folders, so the overflow rule is a backstop for a single absurd folder name rather than the
+ * thing keeping the header to one line. It was the CSS-only approach that produced ten lines in a
+ * task card — `text-overflow` cannot elide the FRONT, which is the end that needed to go.
+ *
+ * `--size-micro` rather than the hand-typed 0.62rem it duplicated — same value, named.
+ */
+.pane-path {
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+  margin-block-start: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
+  padding: 1.25rem;
+}
+
+.pane-image {
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.pane-frame { flex: 1; border: 0; min-height: 0; }
+
+.pane-text {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pane-note {
+  margin: auto;
+  max-width: 28rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+/* The editor's own reason for declining a .md — §12 requires it be shown, not merely implied. */
+.pane-note-refusal {
+  margin: 0;
+  padding: 0.6rem 1.25rem;
+  text-align: start;
+  font-size: 0.72rem;
+  color: var(--status-paused);
+  border-block-end: 1px solid var(--border-primary);
+}
+
+/* --- the editor, now inside the right-hand pane rather than filling the shell -------- */
+
+.editor-surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Only the editor scrolls; the formatting bar is welded to the top of the surface (A16). */
+.editor-host { flex: 1; min-height: 0; overflow: auto; }
+
+
+/* ==================================================================================== *
+ * FEEDBACK — annex A27, verbatim: bottom-center pill, radius.full on bg.surface,
+ * hairline + shadow.lg, fadeInUp 0.2s. The banner variant is §13.5's requirement, not a
+ * style choice: a data-safety event must not fade.
+ * ==================================================================================== */
+
+.feedback {
+  position: fixed;
+  inset-block-end: 1.5rem;
+  inset-inline: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  /* The region must not eat clicks meant for the app behind it. */
+  pointer-events: none;
+}
+
+.feedback-message {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: min(36rem, calc(100vw - 2rem));
+  padding: 0.5rem 1rem;
+  border-radius: 999px;               /* radius.full */
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+  color: var(--text-primary);
+  font-size: 0.78rem;                 /* the ladder's toast size */
+  line-height: 1.5;
+  animation: feedback-rise 0.2s ease-out;
+}
+
+@keyframes feedback-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedback-message { animation: none; }
+}
+
+/*
+ * A banner is squared off and full-width-ish rather than a pill. The shape difference is doing
+ * real work: §13.5's whole complaint about v1 is that a data-safety event looked like an ordinary
+ * confirmation and was missed.
+ */
+.feedback-banner {
+  border-radius: 6px;
+  max-width: min(48rem, calc(100vw - 2rem));
+  width: 100%;
+}
+
+.feedback-warning { border-color: var(--status-paused); }
+.feedback-danger { border-color: #b4544a; }
+.feedback-success { border-color: var(--status-active); }
+
+.feedback-text { flex: 1; min-width: 0; }
+
+.feedback-dismiss {
+  flex: 0 0 auto;
+  padding: 0 0.35rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  cursor: default;
+}
+
+.feedback-dismiss:hover { color: var(--text-primary); }
+
+
+/* ==================================================================================== *
+ * THE ROW MENU — annex A8 (clamped, self-measuring) and A35 (the modal contract).
+ * ==================================================================================== */
+
+/* Always present, never hover-revealed: the PRD says "always visible on touch". */
+.row-menu-button {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding: 0 0.3rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: default;
+}
+
+.row-menu-button:hover { color: var(--text-primary); background: var(--bg-surface); }
+
+/* A row with a mutation in flight is not clickable, and looks it — §13.8. */
+.tree-row.is-busy { opacity: 0.5; pointer-events: none; }
+
+/*
+ * §4.8's dropdown: 210px wide, `--bg-surface`, `--shadow-lg`. The width is stated rather than
+ * grown-to-fit so a folder's six items and a file's four open the same shape — a menu that changes
+ * width by row is one you cannot build muscle memory against.
+ */
+.row-menu {
+  position: fixed;
+  z-index: 50;
+  width: 210px;
+  padding: 0.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* §4.8: 32px rows. `min-height` rather than padding, so a two-line label grows instead of clipping. */
+.row-menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  text-align: start;
+  font-family: var(--font-system);
+  font-size: 0.75rem;   /* the ladder's context-menu size */
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.row-menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* --- §18.6: on a phone the menu is a sheet from the bottom edge --------------------- */
+
+/*
+ * The button stays where it is; the menu moves. A dropdown anchored to a `⋯` near the top of a
+ * phone screen puts every choice out of thumb reach, and clamping only promises it is on screen.
+ *
+ * Positioned entirely here, with no inline `style` from script — so a sheet can never inherit a
+ * stale `left`/`top` from a dropdown that was open a moment earlier.
+ *
+ * `env(safe-area-inset-bottom)` keeps the last item clear of the home indicator; it resolves to 0px
+ * on anything without one, so there is no branch and nothing to get wrong on a device that has none.
+ */
+.row-menu-sheet {
+  inset: auto 0 0 0;
+  width: auto;          /* the dropdown's fixed 210px is a pointer size; a sheet spans the edge */
+  min-width: 0;
+  padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom));
+  border-width: 1px 0 0;
+  /* §4.8's `--radius-xl` on the top corners — the shape a phone reads as "sheet". */
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  box-shadow: 0 -8px 32px rgb(0 0 0 / 50%);
+}
+
+/*
+ * §4.8's grabber. **Not a drag handle and it does not pretend to be one** — nothing here listens for
+ * a drag. It is the shape that says "this is a sheet and it goes away downward", which is what the
+ * outside-click and Escape paths already do.
+ */
+.row-menu-grabber {
+  width: 36px;
+  height: 4px;
+  margin: 0.1rem auto 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--border-primary);
+}
+
+/*
+ * **The target, said on screen rather than only in an `aria-label`.**
+ *
+ * A dropdown is anchored to the `⋯` you pressed, so what it acts on is obvious. A sheet rises from
+ * the bottom edge with that row possibly scrolled out of sight — and every item on it is a file
+ * operation. Until this, the subject was named in exactly one place a person looking at the screen
+ * could not read.
+ */
+.row-menu-subject {
+  padding: 0 0.8rem 0.5rem;
+  font-size: var(--size-micro);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-block-end: 1px solid var(--border-primary);
+  margin-block-end: 0.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * §4.8's explicit Close. **Tapping outside a full-width sheet means tapping the app behind it**, and
+ * on the tree screen that is another row — dismissing the menu and selecting something else in one
+ * gesture. This is the exit that costs nothing.
+ *
+ * Separated by a rule and not styled as a menu item, because it is the one control here that does
+ * not touch the file.
+ */
+.row-menu-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--touch-menu);
+  margin-block-start: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  font-family: var(--font-system);
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-block-start: 1px solid var(--border-primary);
+  cursor: default;
+}
+
+.row-menu-close:hover { color: var(--text-primary); }
+
+/*
+ * §18's 44 pt floor, and it applies to the rows in the sheet rather than to the sheet.
+ *
+ * A menu item sized for a pointer is a 22px target, which is half of what a thumb needs — and the
+ * consequence is not a miss but a *wrong hit*, on a list where the neighbouring item may move a
+ * file. The desktop size is deliberately left alone: this is a touch rule, not a taste one.
+ */
+.row-menu-sheet .row-menu-item {
+  /*
+   * **`--touch-menu` (52px), not the 44px floor.** §4.8 asks for it and the reason is in the
+   * sentence above: the cost of a mis-hit here is not a miss, it is the neighbouring item — which
+   * may move a file. 44 is the minimum anywhere a thumb lands; a list of file operations is where
+   * you spend the extra eight pixels.
+   */
+  min-height: var(--touch-menu);
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9375rem;
+  border-radius: 8px;
+}
+
+/* --- the name prompt --------------------------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 45%);
+}
+
+.modal {
+  min-width: min(26rem, calc(100vw - 2rem));
+  /*
+   * The backstop for the same failure. Bounding `.modal-preview` fixes the case that produced it;
+   * this bounds every *other* way a dialog can grow — a long refusal message, two previews, a list
+   * — so no future content can put a button where a person cannot reach it.
+   */
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+  padding: 1.25rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 55%);
+}
+
+.modal-title { font-size: 0.95rem; color: var(--text-primary); }  /* the ladder's modal title */
+
+.modal-input {
+  width: 100%;
+  margin-block-start: 0.9rem;
+  padding: 0.45rem 0.6rem;
+  font-family: var(--font-system);
+  font-size: 0.88rem;   /* the ladder's modal input */
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 5px;
+}
+
+/* §13.6's preview: what the name will actually become, before anything is pressed. */
+/*
+ * **BOUNDED, because the content is a document and documents are any size.**
+ *
+ * Found 2026-08-15 by a test using a 70 KB file. Neither this nor `.modal` had a height limit, so a
+ * large document grew the dialog past the viewport and **pushed its own buttons off the bottom of
+ * the screen, with nothing to scroll** — the backdrop is fixed and the dialog was taller than it.
+ *
+ * The dialog this breaks worst is the rescue prompt: the one surface whose entire purpose is
+ * recovering unsaved work became unreachable **exactly when the work was substantial**. Restore,
+ * Discard and Decide later were all off screen; there was no way to answer it and no way to dismiss
+ * it.
+ *
+ * So the preview scrolls and the dialog does not. `40vh` leaves room for a title, a second preview
+ * and the buttons on the shortest screen this app supports.
+ */
+.modal-preview {
+  min-height: 1.2em;
+  max-height: 40vh;
+  overflow: auto;
+  margin-block-start: 0.5rem;
+  font-size: 0.62rem;
+  color: var(--text-dim);
+}
+
+.modal-preview.is-refused { color: var(--status-paused); }
+
+/*
+ * §4.8 — the resulting filename, in mono. Only the name prompt: `.modal-preview` is shared with the
+ * unsaved-work dialog, whose preview is prose and reads worse monospaced.
+ *
+ * A filename is the one string in these dialogs where `l` against `1`, or a hyphen against an en
+ * dash, decides whether you typed what you meant.
+ */
+.modal-preview.is-filename {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1rem;
+}
+
+.modal-cancel,
+.modal-confirm {
+  padding: 0.35rem 0.85rem;
+  font-family: var(--font-system);
+  font-size: 0.68rem;
+  border-radius: 5px;
+  cursor: default;
+}
+
+.modal-cancel {
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+}
+
+.modal-confirm {
+  color: var(--bg-primary);
+  background: var(--accent-teal);
+  border: 1px solid var(--accent-teal);
+}
+
+/* A35: confirm is disabled while empty, and must LOOK disabled. */
+.modal-confirm[disabled] {
+  background: var(--bg-hover);
+  border-color: var(--border-primary);
+  color: var(--text-dim);
+}
+
+
+/* --- the move picker: annex A6 ------------------------------------------------------ */
+
+.modal-wide { min-width: min(34rem, calc(100vw - 2rem)); }
+
+/* M6's count, stated in the question rather than reported afterwards. */
+.modal-note {
+  margin-block-start: 0.6rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.picker {
+  margin-block-start: 0.9rem;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 5px;
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding-block: 0.2rem;
+  padding-inline-end: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  cursor: default;
+  white-space: nowrap;
+}
+
+/*
+ * The folder browser's rows are `<button>` — they navigate, and a keyboard must reach them. The UA
+ * chrome is reset here rather than in a second class, so a row looks identical whichever element it
+ * is; `width: 100%` and `text-align: start` are what a button needs to sit in the list like a div.
+ */
+button.picker-row {
+  width: 100%;
+  font-family: inherit;
+  text-align: start;
+  background: transparent;
+  border: 0;
+}
+
+.picker-row:hover { background: var(--bg-hover); }
+
+/* A6: "teal selection". */
+.picker-row.is-chosen {
+  background: var(--accent-teal-soft);
+  color: var(--text-primary);
+}
+
+.picker-twisty {
+  flex: 0 0 auto;
+  width: 1.1em;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  cursor: default;
+}
+
+.picker-label { overflow: hidden; text-overflow: ellipsis; }
+
+
+/* --- the save state, and the two-pane conflict surface (§13.5, item E) -------------- */
+
+/* A13: the save pill — 0.65rem, radius.full, teal saving / green saved. */
+.save-status {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.conflict { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+.conflict-header { padding: 1rem 1.25rem; border-block-end: 1px solid var(--border-primary); }
+.conflict-title { font-size: 0.85rem; color: var(--text-primary); }
+.conflict-note { margin-block-start: 0.25rem; font-size: 0.72rem; color: var(--status-paused); }
+
+.conflict-panes { flex: 1; min-height: 0; display: flex; gap: 1px; background: var(--border-primary); }
+
+.conflict-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.conflict-pane-label {
+  padding: 0.5rem 1rem;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  border-block-end: 1px solid var(--border-secondary);
+}
+
+/* Yours is the side at risk, so it carries the accent. */
+.conflict-pane.is-mine .conflict-pane-label { color: var(--accent-teal); }
+
+.conflict-text {
+  flex: 1;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.conflict-actions {
+  display: flex;
+  gap: 0.5rem;
+  /*
+   * Extra room at the bottom, because the feedback region is fixed there. The banner is dismissed
+   * when this surface opens, but a toast can still arrive while it is up — and a control a person
+   * cannot press is worse than one that is not offered.
+   */
+  padding: 0.75rem 1.25rem 3.5rem;
+  border-block-start: 1px solid var(--border-primary);
+}
+
+.conflict-choice,
+.conflict-later {
+  padding: 0.35rem 0.85rem;
+  font-family: var(--font-system);
+  font-size: 0.68rem;
+  border-radius: 5px;
+  cursor: default;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+}
+
+.conflict-choice:hover { border-color: var(--accent-teal); }
+/* "Decide later" is a real answer, not a dismissal — but it is not the primary one. */
+.conflict-later { margin-inline-start: auto; color: var(--text-muted); background: transparent; }
+
+
+/*
+ * The back control, at the HEAD of the sidebar — the mirror of Settings at its foot.
+ *
+ * PRD: "drilling into a file from another tab leaves a back control labeled with the origin tab."
+ * It is only ever present when there is somewhere to go back to, so `[hidden]` is stated explicitly
+ * here for the reason the panes and the slide-over both needed it: a `display` on the class beats
+ * the user agent's `[hidden] { display: none }`, and the control would sit there permanently
+ * offering to take you back to nothing.
+ */
+.files-back {
+  flex: 0 0 auto;
+  display: flex;
+  border-block-end: 1px solid var(--border-primary);
+}
+
+.files-back[hidden] { display: none; }
+
+.files-back-button {
+  flex: 1 1 auto;
+  padding: 0.45rem 0.6rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: default;
+}
+
+.files-back-button:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+/* --- Settings, and the folder picker behind it (§11; ruled 2026-08-09) --- */
+
+/*
+ * The Settings control sits at the FOOT of the sidebar, under the tree it edits. `margin-block-start:
+ * auto` rather than a fixed offset: the tree grows, and a settings button that scrolls away with it
+ * is one a person cannot find on a deep tree.
+ */
+.sidebar-strip {
+  flex: 0 0 auto;
+  display: flex;
+  /* The rule runs across the whole strip, not under each half — one band, two controls. */
+  border-block-start: 1px solid var(--border-primary);
+}
+
+/*
+ * **Two equal halves.** `flex: 1 1 0` rather than `50%`: a percentage of a box that also has padding
+ * overflows it, and the overflow lands on the right-hand control, which is the new one — so the
+ * mistake would look like the new thing being broken.
+ */
+.sidebar-settings,
+.sidebar-search {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: default;
+}
+
+/* A hairline between them, so the strip reads as two controls rather than one wide one. */
+.sidebar-search { border-inline-start: 1px solid var(--border-primary); }
+
+.sidebar-settings:hover,
+.sidebar-search:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+.settings-section { margin-block-start: 0.9rem; }
+
+.settings-section-title {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.settings-section-note {
+  margin-block-start: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.settings-rows {
+  margin-block-start: 0.7rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 5px;
+  background: var(--bg-secondary);
+}
+
+.settings-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.settings-row + .settings-row { border-block-start: 1px solid var(--border-primary); }
+
+.settings-row-name { font-size: 0.76rem; color: var(--text-primary); }
+
+/*
+ * The short path, in mono because it is a path and the eye reads the segment boundaries. `dir=ltr`
+ * is not set here: the string is `folder/folder`, never absolute, so there is no leading separator
+ * for bidi reordering to move.
+ */
+.settings-row-path {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-empty {
+  padding: 0.6rem 0.55rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.settings-add {
+  margin-block-start: 0.7rem;
+  padding: 0.35rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  cursor: default;
+}
+
+.settings-add:hover { border-color: var(--accent-teal); }
+
+/*
+ * The path you are standing in. This is the one absolute path the UI shows, and it shows it because
+ * the CTA acts on it — a person about to register a folder has to be able to read which one.
+ */
+.browser-path {
+  margin-block-start: 0.7rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.browser-roots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0.25rem;
+  border-block-end: 1px solid var(--border-primary);
+}
+
+.browser-root {
+  padding: 0.15rem 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  cursor: default;
+}
+
+.browser-root.is-current { color: var(--text-primary); border-color: var(--accent-teal); }
+
+.picker-row.is-up { color: var(--text-muted); }
+
+.picker-empty {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+/* The plain-language sentence a confirmation leads with. */
+.modal-warning {
+  margin-block-start: 0.6rem;
+  font-size: 0.76rem;
+  color: var(--text-primary);
+}
+
+.modal-note.is-refused { color: var(--status-paused); }
+
+
+/*
+ * Remove — the registry entry only. Styled as a quiet secondary action, deliberately NOT as a
+ * destructive one: red would say "this deletes something", and the whole point is that it does not.
+ * `margin-inline-start: auto` pushes it to the row's end so it never sits beside the name it acts
+ * on, where a mis-click is a mis-read.
+ */
+.settings-remove {
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+  padding: 0.15rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  cursor: default;
+}
+
+/*
+ * **A37: Remove hovers danger-red.** It hovered teal — the same colour as every affirmative control
+ * in the app — and `--danger-hover` was transcribed from §C and then consumed by nothing. A
+ * destructive-looking control that lights up in the friendly colour is the wrong signal, even here
+ * where the annex is careful to say the disk is untouched.
+ */
+.settings-remove:hover { color: var(--danger-hover); border-color: var(--danger-hover); }
+
+/* ---------------------------------------------------------------------------
+ * Tabs and the Tasks board. Phase 9.
+ *
+ * The board's columns are folders, so the column list is as long as the project
+ * makes it — the row scrolls horizontally rather than squeezing, because a lane
+ * narrowed to nothing is a lane you cannot drop into.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * **`[hidden]` has to win, and by default it does not.**
+ *
+ * `.files-pane` sets `display: flex`, and a class selector beats the user-agent's
+ * `[hidden] { display: none }` — so toggling the attribute changed nothing and both
+ * panes rendered on top of each other. The first version of the tab bar looked
+ * completely broken for exactly this reason.
+ *
+ * Scoped to the panes rather than a global `[hidden] { display: none !important }`,
+ * which would fight every other component that ever wants a hidden-but-laid-out
+ * element.
+ */
+.files-pane[hidden],
+.tasks-pane[hidden] {
+  display: none;
+}
+
+/* The board sits beside the rail, in the same band the Files pane occupies. */
+.tasks-pane {
+  position: absolute;
+  inset: 0 0 0 var(--rail-width);
+  /**
+   * **The slide-over slides in from this edge, so it is clipped to this box.** Without the clip,
+   * the panel mid-close — translated a full width to the right, for 180ms — widens the document
+   * and the whole page can be scrolled sideways onto empty space. The board's own horizontal
+   * scrolling lives on `.board-host` inside, which is unaffected.
+   *
+   * Safe for the dialogs that mount in here: `.modal-backdrop` is `position: fixed` and no
+   * ancestor carries a transform, so a fixed layer is not clipped by this.
+   */
+  overflow: hidden;
+}
+
+/*
+ * **The tabs are the rail's second band**, under the header's rule and above the tree. §4.1, and
+ * the reference app's own 6/12 padding and 2px gap.
+ *
+ * `position: static` on a desktop — it is a row in the rail's column, not a strip pinned anywhere.
+ * The phone puts it back to `absolute` and pins it to the bottom, which is where it stays.
+ */
+.tabs {
+  position: static;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border-block-end: 1px solid var(--border-primary);
+  flex: 0 0 auto;
+}
+
+.tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 14px;
+}
+
+/* The phone's active tab reads by its top edge marker; this is the text half of it. */
+.tab.is-active { color: var(--text-primary); }
+
+/*
+ * **THE ACTIVE TAB IS A FILLED PILL, NOT AN UNDERLINE.**
+ *
+ * the operator, describing the reference app: *"whatever you're on is highlighted by blue."* The packet
+ * turned that into a 1px teal underline 4px below the label. The app they were describing does no such
+ * thing — it fills the active item with a 10% teal wash and colours the text teal — and a wash is
+ * far more visible at a glance than a hairline. Built from what they pointed at, not from the writeup.
+ *
+ * Desktop only. The phone's bar keeps the top edge marker it already has, which they have tested; its
+ * rules are further down and would otherwise inherit this fill.
+ */
+/*
+ * **THE FIFTH TAB OVERFLOWED THE RAIL, and the operator caught it on their own desktop.** P14.
+ *
+ * Measured: the rail is 272px, its tab row can use 271, and five tabs wanted **279** — so `Boards`
+ * ended at 278.5 and hung 6.5px past the rail's right edge.
+ *
+ * **The miss was mine and it was a measuring miss, not a design one.** The phone bar was measured
+ * carefully at 390px before the tab was added and again after. The desktop rail was never measured
+ * at all — and it is the NARROWER of the two. "Five tabs fit" was proven on the wide surface and
+ * assumed on the tight one.
+ *
+ * **Fixed responsively rather than by shaving a number**, which is what they asked for: *"we need to
+ * be responsive."* Three declarations, and **the mutation runs below are what establish which does
+ * what** — the first draft of this comment credited a fourth that turns out to do nothing:
+ *
+ *   `flex: 0 1 auto`          lets a tab shrink below its natural width. Disabling the shrink and
+ *                             restoring the old padding puts the row back outside the rail.
+ *   `overflow: hidden` +      the last resort, and **also what allows the shrink to happen at all**:
+ *   `text-overflow: ellipsis` an `overflow` other than `visible` sets a flex item's automatic
+ *                             minimum size to zero. Remove it and the row overhangs again. When it
+ *                             does run short the label degrades to `Board…` INSIDE the rail rather
+ *                             than spilling past it. Nothing truncates today.
+ *   `padding: 5px 6px`        buys the room so nothing has to shrink at all — five tabs measure
+ *                             ~238 against 271 available. Restore `10px` and the labels truncate.
+ *
+ * **`min-width: 0` was here and has been removed.** The comment claimed it was what let a tab shrink;
+ * a mutation deleting it changed nothing, because `overflow: hidden` above already zeroes the
+ * automatic minimum size. A line that does nothing, described as load-bearing, is worse than no line
+ * — it is the next person's wasted hour, and this file has already had four flatly untrue comments
+ * removed for the same reason.
+ *
+ * So a sixth tab, or a longer label, compresses and then truncates. **It cannot overhang again**,
+ * which is the property worth having — a number tuned to exactly five would break on the next one.
+ */
+:root:not([data-layout='mobile']) .tab {
+  flex: 0 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-radius: var(--radius-sm);
+  padding: 5px 6px;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+:root:not([data-layout='mobile']) .tab.is-active {
+  font-weight: 500;
+  color: var(--accent-teal);
+  background: var(--accent-teal-soft);
+}
+
+.tasks-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.board-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.board-bar-label { color: var(--text-secondary); font-size: 0.85rem; }
+
+.board-picker {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  padding: 5px 8px;
+  max-width: 460px;
+}
+
+.board-host { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px; }
+
+.board-empty {
+  color: var(--text-secondary);
+  max-width: 46rem;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------------------
+ * BOARDS — the home list. P14 B1.
+ *
+ * A vertical list, not a horizontal lane scroller: this screen answers *"which board"*, and the
+ * columns come one level in. `.boards-host` overrides `.board-host`'s horizontal scroll for that
+ * reason rather than a new host class being invented.
+ * ------------------------------------------------------------------------- */
+
+.boards-host {
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.boards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 46rem;
+}
+
+/*
+ * A row is a button. It is the whole hit target — a name with a small target beside it is the §18.6
+ * failure this build already paid for once: *"250 browser tests were green and a thumb was not."*
+ * 44px minimum, which is the same floor the tab bar takes.
+ */
+.boards-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  min-height: 44px;
+  padding: 8px 10px;
+  font-family: inherit;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.boards-row:hover { background: var(--bg-hover); }
+
+.boards-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+.boards-row-name {
+  font-size: var(--size-row);
+  color: var(--text-primary);
+}
+
+/* Where it lives. Dimmer than the name, because it is the disambiguator and not the answer. */
+.boards-row-where {
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------------------
+ * ONE BOARD. P14 B2 — §18.4's "two screens, never both", applied to this tab.
+ * ------------------------------------------------------------------------- */
+
+.board-screen-bar {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-block-end: 10px;
+}
+
+/*
+ * The way back. Drawn at both widths, not only on the phone: the Boards tab has one pane, so without
+ * this there is no route back to the list except leaving the tab — reachable-by-nothing, again.
+ */
+.board-screen-back {
+  flex: 0 0 auto;
+  padding: 4px 8px 4px 0;
+  font-family: inherit;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  cursor: default;
+}
+
+.board-screen-back:hover { color: var(--text-primary); }
+
+.board-screen-back:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+  border-radius: var(--radius-sm);
+}
+
+/*
+ * **Keeps the bar to one line.** Measured, after a first version of this comment claimed it stopped
+ * a long board name pushing `Arrange` off a 390px screen — it does not, and the test written to
+ * prove that passed with all five of these lines deleted.
+ *
+ * What actually happens without them: the title is a flex item with `min-width: auto`, so it shrinks
+ * to its longest *word* by **wrapping**, and the bar grows to two or three lines on a phone. The
+ * controls stay on screen; the bar just eats the top of the board. This trades the wrap for an
+ * ellipsis, and the test asserts the height rather than the overhang.
+ */
+.board-screen-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--size-row);
+  color: var(--text-primary);
+}
+
+/*
+ * The way into the arrange stack. The operator asked for it *"discretely somewhere"*, so it reads as the
+ * quietest control on the bar: no border, dim, and sitting after the one that creates.
+ */
+.board-arrange {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.board-arrange:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+.board-arrange:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+/*
+ * Columns scroll sideways, which is what makes it a board. `.boards-host` turns its own horizontal
+ * scroll off for the list screen, so it is turned back on here rather than the host being changed —
+ * the two screens share a host and must not fight over it.
+ */
+.board-columns {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-block-end: 4px;
+}
+
+/*
+ * **A LANE, not a bare stack.** Ruled 2026-08-22: *"I do want you to style the board like the
+ * task board."*
+ *
+ * The Tasks board's lanes are bordered, rounded containers with their own ground; Boards had none of
+ * that — a 240px flex column with a hairline under its name. Side by side they read as two different
+ * applications, and boards is the one they use for planning.
+ *
+ * **The Tasks lane's own tokens, not a second set of numbers.** Same width, same minimum, same
+ * radius, so the two boards stay the same shape when one of them is next tuned. `--lane-width-max`
+ * is capped against the viewport as well, because a Tasks lane lives in a grid that already bounds
+ * it and a board column scrolls sideways on a phone with nothing to stop it.
+ *
+ * **The class stays `board-column`** rather than borrowing `board-lane`. Four suites locate the Tasks
+ * and Projects lanes by that name, and a fifth surface answering to it is the ambiguous-locator
+ * mistake this build has now made four times. Shared look, separate names.
+ */
+.board-column {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  flex: 0 0 var(--lane-width);
+  min-width: var(--lane-width-min);
+  max-width: min(var(--lane-width-max), 78vw);
+  min-height: 120px;
+}
+
+/* Not a folder, so it does not get a folder's edge — the Tasks board says the same thing this way. */
+.board-column.is-synthetic { border-style: dashed; }
+
+/*
+ * The lane header's padding and rule. `align-items: center` rather than `baseline`, for the reason
+ * the Tasks header gives about its dot: a 28px button has no baseline worth aligning a name to, and
+ * on `baseline` the arrows sat visibly low.
+ */
+.board-column-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 11px;
+  border-block-end: 1px solid var(--border-primary);
+}
+
+/*
+ * **Keeps a column head to one line.** Same correction as `.board-screen-title` above: a long name
+ * does not push the arrows out of the column, it **wraps**, and a head two or three lines tall
+ * throws every other column's cards out of alignment beside it.
+ *
+ * Added with the second arrow rather than as a tidy-up: the pair leaves the name about 28px less
+ * room than the single menu button did, so a name that used to fit now wraps.
+ */
+.board-column-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+/*
+ * The reorder arrows, on a real column's head only. Two of them, and they replaced a `⋯` menu that
+ * cost two presses per place moved: *"if I want to move something all the way over, it's messy."*
+ *
+ * Narrower than the menu button was, because there are now two of them in the same head. The pair
+ * still clears the card move button's thumb target between them, and the long move has its own
+ * surface in the arrange panel rather than living in this 240px strip.
+ */
+.board-column-move {
+  flex: 0 0 auto;
+  min-width: 28px;
+  min-height: 28px;
+  font-family: inherit;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.board-column-move:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/*
+ * The ends of the row. Kept in place rather than removed so the head does not reshape as columns
+ * move past each other — a hole here slides the other arrow under a thumb already travelling.
+ */
+.board-column-move:disabled { opacity: 0.28; }
+
+.board-column-move:focus-visible {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+/* A column scrolls and its head does not, so thirty cards and three look alike without this. */
+.board-column-count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * `flex: 1 1 auto` with `min-height: 0` so a full column SCROLLS rather than growing past the board
+ * — which is what keeps `+ Card` on screen. The Tasks lane states the same reasoning: without it a
+ * lane of twenty cards pushes its own add-control off the bottom, so the control is present on
+ * exactly the lanes that need it least.
+ */
+.board-column-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 44px, the same thumb floor the tab bar and the board rows take. */
+/*
+ * **The Tasks card's treatment**: lifted off the lane rather than tinted into it — its ground, its
+ * radius, its padding, and the inset highlight and shadow that make it read as a thing sitting on a
+ * surface. Same tokens, so the two boards cannot drift apart on the next tuning pass.
+ *
+ * **`cursor: grab`, as of 2026-08-22.** It said `default` here, on a misreading of §18.5 as "no
+ * drag" — the rule is *"one mechanism, with drag demoted to an accelerator"*, and Boards had shipped
+ * with only the mechanism. The operator found the gap by reaching for the gesture: *"I'm not able to grab
+ * an item and move it."*
+ *
+ * **The 44px floor stays.** It is the thumb target the tab bar and the tree rows take, and it is
+ * this build's own rule rather than the packet's.
+ */
+.boards-card {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 14px 16px;
+  font-family: inherit;
+  text-align: start;
+  background: var(--bg-secondary);
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow:
+    inset 0 1px 0 var(--lift-top),
+    inset 0 0 0 1px var(--border-primary),
+    var(--shadow-sm);
+  cursor: grab;
+}
+
+/*
+ * Lifted while it travels, rather than faded into the board — the Tasks card's own treatment, and
+ * the thing that makes the gesture feel like carrying something.
+ */
+.boards-card.is-dragging { opacity: 0.4; cursor: grabbing; }
+
+/*
+ * **The insertion line, which is what makes a drop land in a POSITION rather than in a column.**
+ * Drawn on the card the pointer is above, on whichever side the drop would land — inset so it reads
+ * as a gap opening between two cards rather than as a border on one of them.
+ */
+.boards-card.is-drop-before { box-shadow: inset 0 3px 0 var(--accent-teal); }
+.boards-card.is-drop-after { box-shadow: inset 0 -3px 0 var(--accent-teal); }
+
+/*
+ * The column accepting a card. Teal, matching the Tasks lane's own drop state, so a person who has
+ * used one board already knows what this means on the other.
+ */
+.board-column.is-over { border-color: var(--accent-teal); }
+
+.boards-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+.boards-card-title {
+  font-size: var(--size-row);
+  color: var(--text-primary);
+}
+
+/*
+ * The create controls. P14 B4.
+ *
+ * Outlined, not filled: §4.1 gives the app exactly one filled button and it is `+ New`. Three filled
+ * buttons on a board screen would make none of them mean anything.
+ */
+.boards-new,
+.boards-add-card {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.boards-new:hover,
+.boards-add-card:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+.boards-new:focus-visible,
+.boards-add-card:focus-visible,
+.boards-card-move:focus-visible {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+/*
+ * Full width at the foot of its column, so it reads as "the end of this column" rather than a card —
+ * and dashed, which is how the Tasks board says the same thing about its own add-control.
+ */
+.boards-add-card {
+  width: 100%;
+  text-align: start;
+  border-style: dashed;
+  border-radius: 5px;
+}
+
+/*
+ * The move control, inside the card and pushed to its trailing edge.
+ *
+ * `margin-inline-start: auto` rather than a fixed offset, so a long title pushes it rather than
+ * running underneath it. 44px wide: §18.5 makes this the ONLY way to move a card on a phone, so it
+ * is not a control that can afford to be fiddly.
+ */
+.boards-card-move {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  min-width: 44px;
+  min-height: 32px;
+  font-family: inherit;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.boards-card-move:hover { color: var(--text-primary); background: var(--bg-primary); }
+
+.boards-empty {
+  max-width: 46rem;
+  line-height: 1.5;
+}
+
+.boards-empty-title {
+  font-size: var(--size-modal-title);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.boards-empty-hint {
+  margin-block-start: 4px;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+}
+
+/*
+ * The trailing space is on the CONTENT, not on the scroller.
+ *
+ * `.board-host` carries `padding: 14px`, and a scroll container's end padding is not painted past
+ * the last item — so scrolled fully right, the final lane sat flush against the edge with its
+ * quick-add appearing sliced. It is the shape the operator reported as "no padding on the right side",
+ * arrived at from a different direction than the modal fields that turned out to be the box model.
+ *
+ * Padding on the flex content is inside `scrollWidth`, so it survives the scroll and the board ends
+ * where it looks like it should.
+ */
+.board {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding-inline-end: var(--board-tail);
+}
+
+.board-lane {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--lane-width);
+  min-width: var(--lane-width-min);
+  max-width: var(--lane-width-max);
+  max-height: 100%;
+  min-height: 120px;
+}
+
+/* Uncategorized is not a folder. Marked so it does not read as one. */
+.board-lane.is-synthetic { border-style: dashed; }
+.board-lane.is-over { border-color: var(--accent-teal); }
+
+/*
+ * A21's drop target: "a dashed teal 'Drop here' target while dragging over".
+ *
+ * Present in every lane and shown only while a card is over it, so an EMPTY lane is visibly a place
+ * a card can go rather than a place nothing is — the PRD's "empty lanes render with drop targets",
+ * which is the case that matters, because the reason to drag a card into Done is usually that Done
+ * is empty.
+ */
+.board-lane-drop {
+  display: none;
+  padding: 10px;
+  font-size: var(--size-menu);
+  color: var(--accent-teal);
+  text-align: center;
+  border: 1px dashed var(--accent-teal);
+  border-radius: 5px;
+  background: var(--accent-teal-soft);
+}
+
+.board-lane.is-over .board-lane-drop { display: block; }
+
+/*
+ * `space-between` puts the count at the far end. The dot and the name are one group at the near end
+ * — wrapped below rather than left as three children, or the dot would be pushed to the middle.
+ *
+ * `align-items: center`, not `baseline`: a 6px dot has no baseline worth aligning to, and on
+ * `baseline` it sat visibly low against the name.
+ */
+.board-lane-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.board-lane-header > .board-lane-name { margin-inline-end: auto; }
+
+/*
+ * A23's lane dot. 6px, and it never carries meaning alone — the lane's name is right beside it, so
+ * the colour is a second channel rather than the only one. That is why `aria-hidden` is correct on
+ * it: a screen reader gets the name, which is the information.
+ */
+.board-lane-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--text-dim);
+}
+
+.board-lane-dot[data-lane-kind='urgent'] { background: var(--lane-doing); }
+.board-lane-dot[data-lane-kind='next'] { background: var(--lane-todo); }
+.board-lane-dot[data-lane-kind='done'] { background: var(--lane-done); }
+
+.board-lane-name { color: var(--text-primary); font-size: 0.9rem; }
+.board-lane-count { color: var(--text-secondary); font-size: 0.8rem; }
+
+/*
+ * `flex: 1 1 auto` with `min-height: 0` so a full lane SCROLLS its cards rather than growing past
+ * the column — which is what keeps the quick-add below it on screen. Without it a lane with twenty
+ * cards pushes its own quick-add off the bottom, and the control the PRD puts on every lane is
+ * present on the ones that need it least.
+ */
+.board-cards {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/*
+ * The refresh control, on all three boards.
+ *
+ * `margin-inline-start: auto` puts it at the far end of whatever bar it is dropped into — beside the
+ * project picker on Tasks, beside the filter on Projects, alone on Inbox — without each of those
+ * bars needing a rule about it.
+ *
+ * The stale state is carried by BOTH the colour and the label, because a marker that exists only in
+ * colour is a marker a person with any of the common colour deficiencies does not have. The label
+ * changes to "Refresh — files changed" and the accessible name says the same thing.
+ */
+.board-refresh {
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  font-family: inherit;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  cursor: default;
+}
+
+.board-refresh:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+.board-refresh.is-stale {
+  color: var(--text-primary);
+  border-color: var(--accent-teal);
+}
+
+/*
+ * The quick-add, at the foot of every lane. PRD: "every lane carries a quick-add at its bottom."
+ *
+ * `margin-block-start: auto` pins it to the bottom of the column rather than to the end of the
+ * cards — the same reasoning the Settings control uses in the sidebar. Without it a lane with two
+ * cards puts its quick-add half way up the screen, and four lanes put theirs at four heights.
+ */
+.board-lane-add {
+  display: flex;
+  gap: 6px;
+  margin-block-start: auto;
+  padding: 8px;
+  border-block-start: 1px solid var(--border-primary);
+}
+
+.board-lane-add-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 7px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+}
+
+.board-lane-add-button {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  cursor: default;
+}
+
+.board-lane-add-button:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+/*
+ * THE CARD — design pass, direction 1a. The whole "alive" treatment is three stacked shadows and
+ * no assets: an inset top hairline that catches light, the border re-expressed as an inset ring,
+ * and a small drop shadow.
+ *
+ * **The border moves into `box-shadow` deliberately.** A real 1px border participates in layout, so
+ * changing it on hover or drag reflows the card's contents by a pixel; an inset ring does not, which
+ * is why the states below can change the edge without anything moving under the pointer.
+ *
+ * `--radius-md` rather than the old hand-typed 5px: the annex defines the radius scale and a
+ * re-typed value is how a design language drifts one component at a time.
+ */
+.board-card {
+  background: var(--bg-secondary);
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: grab;
+  padding: 14px 16px;
+  box-shadow:
+    inset 0 1px 0 var(--lift-top),
+    inset 0 0 0 1px var(--border-primary),
+    var(--shadow-sm);
+  transition: box-shadow var(--motion-row-bg) ease;
+}
+
+/*
+ * Dragging: lifted off the board rather than faded into it. The tilt is the packet's and is what
+ * makes the card read as picked up rather than broken.
+ */
+.board-card.is-dragging {
+  opacity: var(--dragging-opacity);
+  background: var(--bg-surface);
+  transform: rotate(-1.2deg);
+  box-shadow:
+    inset 0 1px 0 var(--lift-top-raised),
+    inset 0 0 0 1px var(--border-primary),
+    var(--shadow-xl);
+}
+
+/*
+ * §18.5/§18.6 — the card's own "⋯". A card had none until P12, and on a phone this is the ONLY way
+ * to move it, because §18.5 removed the drag there.
+ *
+ * Top-right and out of the text flow, so it cannot reflow a title or push the location footer
+ * around. `position: relative` goes on the card for this and nothing else.
+ *
+ * Always visible rather than hover-revealed, on every surface. The PRD already says so for touch,
+ * and a control that appears only on hover is a control that does not exist on a phone.
+ */
+.board-card { position: relative; }
+
+.board-card-menu {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 4px;
+}
+
+/*
+ * The title must not run underneath the button. Reserved space rather than a truncation, because a
+ * task's first words are the whole card and clipping them to make room for a menu is the wrong
+ * trade.
+ */
+.board-card-title { padding-inline-end: 1.5rem; }
+
+/* §18's 44 pt floor applies to the card's control too, and only where a thumb is the pointer. */
+:root[data-layout='mobile'] .board-card-menu {
+  min-width: 44px;
+  min-height: 44px;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+}
+/*
+ * A24's card anatomy, in the annex's own sizes. Both were invented: the title read 0.9rem against
+ * --size-row 0.80rem, and the location footer 0.72rem against --size-glyph 0.58rem. The footer is
+ * deliberately tiny — it is a location, not content, and at the annex size it stops competing with
+ * the title it sits under.
+ */
+.board-card-title { color: var(--text-primary); font-size: var(--size-row); }
+
+/*
+ * A24's hover, re-expressed. It used to raise the border to teal, which read as *selected* on a
+ * board where selection means something else — the packet gives hover a brighter top edge and a
+ * deeper shadow instead, and keeps teal for the card that is actually open.
+ */
+.board-card:hover {
+  box-shadow:
+    inset 0 1px 0 var(--lift-top-hover),
+    inset 0 0 0 1px var(--border-primary),
+    var(--shadow-md);
+}
+
+/*
+ * **OPEN — exactly one card in the app at a time.** Teal is spent here and nowhere else on a card,
+ * which is what stops "open" and "hovered" and "menu is up" reading the same. §4.6's selection
+ * model.
+ */
+.board-card.is-open {
+  background: var(--bg-selected-accent);
+  box-shadow:
+    inset 0 1px 0 var(--lift-top-hover),
+    inset 0 0 0 1px var(--accent-teal),
+    var(--shadow-md);
+}
+
+/*
+ * **ACTED ON — the row whose `⋯` is up.** Background only, no ring: it is a transient state that
+ * must not be mistakable for open. Cleared when the menu closes.
+ */
+.board-card.has-menu { background: var(--bg-hover); }
+
+/*
+ * `:focus-visible`, never `:focus` — a card is focused by a mouse press too, and a ring that
+ * appears on click is the noise that gets focus rings deleted.
+ */
+.board-card:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 var(--lift-top-hover),
+    inset 0 0 0 1px var(--border-primary),
+    var(--shadow-md),
+    0 0 0 2px var(--accent-teal);
+}
+
+.board-card-where {
+  color: var(--text-secondary);
+  font-size: var(--size-glyph);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/**
+ * The connection state, moved to the right end of the tab bar.
+ *
+ * It was a bare line at the top of the shell, which the tab bar then landed on top of — the two
+ * were both "the first thing in the shell" and neither knew about the other. It belongs beside the
+ * tabs anyway: §15 requires the resyncing state be *visible*, and the top strip is where a person
+ * looks for whether the app is talking to anything.
+ */
+/*
+ * **The stream's state, at the foot of the rail.** §4.1 pins it there; it used to hang off the
+ * shell's top-right corner, which was fine while a bar ran across the top and became a label
+ * floating over the pane's own controls the moment that bar moved into the rail.
+ *
+ * `margin-block-start: auto` rather than an offset: the tree above takes the free height, so this
+ * sits against the bottom edge without a number that has to be kept in step with anything.
+ */
+.status {
+  flex: 0 0 auto;
+  margin-block-start: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 16px;
+  border-block-start: 1px solid var(--border-primary);
+  color: var(--text-muted);
+  font-size: var(--size-micro);
+  z-index: 3;
+}
+
+/*
+ * **ON A PHONE, ONLY WHEN SOMETHING IS WRONG.**
+ *
+ * the operator: *"the live thing on the top right overlays refresh."* Measured at 390px: the label sat at
+ * x 355–378 and the board's Refresh at 312–376. There is no free corner at this width — the top
+ * right is Refresh on three of the four tabs.
+ *
+ * **So the healthy state is not drawn here at all.** §15 asks that *"the resyncing state be
+ * VISIBLE"*, which a permanent `Live` badge is not what satisfies — and a badge that is always
+ * present is one nobody reads by the second day. The three states that mean *act, or at least
+ * know* are drawn as a band above the tab bar, full width, where nothing competes for the space.
+ *
+ * **Above the tab bar rather than below the top bar**, because the states it shows are the ones
+ * where you would reach for Refresh, and covering Refresh to tell you the board is stale would be
+ * the same mistake in a new place.
+ *
+ * On the Files tree screen this lands on the Settings strip, which is `z-index: 2` to this one's 3.
+ * Deliberate: these states are rare, and "the connection dropped" outranks a control that opens a
+ * dialog.
+ */
+:root[data-layout='mobile'] .status {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
+  justify-content: center;
+  height: auto;
+  min-height: 28px;
+  margin-block-start: 0;
+  padding: 0.3rem 0.8rem;
+  background: var(--bg-surface);
+  border-block-start: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+:root[data-layout='mobile'] .status[data-state='live'] { display: none; }
+
+/* ---------------------------------------------------------------------------
+ * The Projects board. Phase 9.
+ *
+ * A planned card is marked three ways that do not depend on each other: a
+ * dashed edge, a muted label in words, and reduced weight. Colour alone is the
+ * cue that fails on a phone in sunlight, and the word is what a screen reader
+ * gets — so neither carries the meaning by itself.
+ * ------------------------------------------------------------------------- */
+
+.board-card.is-planned {
+  border-style: dashed;
+  background: transparent;
+}
+
+.board-card-tag {
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+.board-card-body {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin-top: 5px;
+  /* Three lines, then it stops. The card is a reminder; the dialog is where it is read. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The column name is a button, and has to stop looking like one. */
+.board-lane-name.is-editable {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0;
+  text-align: left;
+}
+
+.board-lane-name.is-editable:hover { text-decoration: underline; }
+
+.board-add-card,
+.board-add-column {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed var(--border-primary);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  margin: 0 8px 8px;
+  padding: 7px;
+}
+
+.board-add-column {
+  flex: 0 0 140px;
+  margin: 0;
+  align-self: flex-start;
+}
+
+.board-add-card:hover,
+.board-add-column:hover { color: var(--text-primary); }
+
+.modal-textarea {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  margin-top: 8px;
+  padding: 8px;
+  resize: vertical;
+  width: 100%;
+}
+
+.modal-remove {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  margin-right: auto;
+  padding: 6px 12px;
+}
+
+/**
+ * Armed — one click has landed and the next one removes. The colour is the ramp's `critical`, and
+ * the button's own label changes as well: colour alone is not a state this app relies on, for the
+ * same reason the planned card says the word "Planned" rather than just being dashed.
+ */
+.modal-remove.is-armed {
+  border-color: var(--priority-critical);
+  color: var(--priority-critical);
+}
+
+/* ---------------------------------------------------------------------------
+ * The Inbox tab. Capture is first on the screen because it is what the tab is
+ * for — "the fastest path from 'I have a thought' to 'it's captured'".
+ * ------------------------------------------------------------------------- */
+
+.inbox-host { max-width: 62rem; }
+
+/* The word that makes the target read as a destination rather than a filter. */
+/* ---------------------------------------------------------------------------
+ * First run (§17). One centred card, in the app's own voice. It is the only
+ * screen a person sees before they have given the app anything, so it says what
+ * this is and what it will never do, and offers one action.
+ * ------------------------------------------------------------------------- */
+
+.first-run {
+  max-width: 30rem;
+  margin: 14vh auto 0;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.first-run-title {
+  font-size: var(--size-wordmark);
+  font-weight: var(--weight-emphasis);
+  letter-spacing: var(--ls-wordmark);
+  color: var(--accent-teal);
+}
+
+.first-run-body {
+  margin-block-start: 0.9rem;
+  font-size: var(--size-view-title);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* The promise this whole rebuild exists to keep. Weighted so the eye lands on it. */
+.first-run-promise {
+  margin-block-start: 0.7rem;
+  font-size: var(--size-view-title);
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.first-run-choose {
+  margin-block-start: 1.4rem;
+  padding: 0.45rem 1.1rem;
+  font-family: var(--font-system);
+  font-size: var(--size-chip);
+  color: var(--bg-primary);
+  background: var(--accent-teal);
+  border: 1px solid var(--accent-teal);
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+ * Quick-open (§16). A jump list, above everything, dismissed by Escape or a
+ * click outside — the same shape as a modal without being one, because it asks
+ * nothing and cancelling it costs nothing.
+ * ------------------------------------------------------------------------- */
+
+.quick-open-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--backdrop);
+}
+
+.quick-open {
+  position: fixed;
+  inset-block-start: 12vh;
+  inset-inline: 0;
+  z-index: var(--z-modal);
+  width: min(38rem, calc(100vw - 2rem));
+  margin-inline: auto;
+  padding: 0.6rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+}
+
+.quick-open-field {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font-family: var(--font-system);
+  font-size: var(--size-modal-input);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+.quick-open-field:focus { border-color: var(--accent-teal); outline: none; }
+
+.quick-open-results { max-height: 22rem; overflow: auto; margin-block-start: 0.5rem; }
+
+.quick-open-result {
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  /* The reserved transparent border the annex asks for, so selection does not shift a row. */
+  border-inline-start: 2px solid transparent;
+  cursor: default;
+}
+
+.quick-open-result.is-selected {
+  background: var(--bg-selected);
+  border-inline-start-color: var(--accent-teal);
+}
+
+.quick-open-result-name { font-size: var(--size-row); color: var(--text-primary); }
+.quick-open-result-where { font-size: var(--size-micro); color: var(--text-dim); }
+
+.quick-open-empty {
+  padding: 0.6rem;
+  font-size: var(--size-view-title);
+  color: var(--text-secondary);
+}
+
+.inbox-target-label {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+}
+
+/*
+ * **A COLUMN, NOT A STRIPE.** The operator, on the desktop Inbox: *"the width looked weird… you could
+ * see that it ended on the right… it needs to be centered more or like expanded out."*
+ *
+ * The list ran the full width of the pane with a short filename at the far left of each row, so a
+ * thousand pixels of rule and hit-area ended in nothing. That is what they were seeing end. A mail app
+ * is a column; `--measure` is the token this build already uses for how wide a readable one is.
+ *
+ * Desktop only. On a phone the screen IS the column.
+ */
+:root:not([data-layout='mobile']) .inbox-capture,
+:root:not([data-layout='mobile']) .inbox-group,
+:root:not([data-layout='mobile']) .inbox-clear {
+  max-width: var(--measure);
+  margin-inline: auto;
+}
+
+.inbox-capture {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+/*
+ * **The capture bar stacks on a phone.** The operator: *"a line with like a thing that's crammed in that
+ * says in or something which looks weird on the phone at least."*
+ *
+ * Four controls on one 375px line — a text field, the word "into", a folder select and a button —
+ * left the field about as wide as its own placeholder. The field takes its own row; the destination
+ * and the button share the next one, where the select can be as wide as a folder name needs.
+ */
+:root[data-layout='mobile'] .inbox-capture {
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 8px;
+}
+
+:root[data-layout='mobile'] .inbox-field { flex: 1 1 100%; }
+:root[data-layout='mobile'] .inbox-target { flex: 1 1 auto; min-width: 0; }
+:root[data-layout='mobile'] .inbox-send { min-height: var(--touch-row-min); }
+
+.inbox-field {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  flex: 1 1 auto;
+  font: inherit;
+  padding: 9px 11px;
+}
+
+.inbox-field:focus { border-color: var(--accent-teal); outline: none; }
+
+.inbox-target {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  max-width: 220px;
+  padding: 0 8px;
+}
+
+.inbox-send {
+  appearance: none;
+  background: var(--accent-teal);
+  border: 0;
+  border-radius: 4px;
+  color: #10201f;
+  cursor: pointer;
+  font: inherit;
+  padding: 9px 16px;
+}
+
+.inbox-group { margin-bottom: 18px; }
+
+.inbox-group-header {
+  align-items: center;
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+/*
+ * **THE MONOGRAM.** §4.7's tinted initials, and the first use of the `--mono-*` tokens, which have
+ * been in this file since the design pass began with nothing drawing them.
+ *
+ * The tint is the same 14%-alpha ground the tokens define, so four marks on a screen read as a set
+ * rather than as four unrelated accents. `flex: 0 0 auto` because a circle that squashed into an
+ * ellipse under a long folder name would be worse than no mark at all.
+ */
+.inbox-monogram {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  font-size: var(--size-micro);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+:root[data-layout='mobile'] .inbox-monogram { width: 34px; height: 34px; }
+
+.mono-1 { background: var(--mono-bg-1); color: var(--mono-fg-1); }
+.mono-2 { background: var(--mono-bg-2); color: var(--mono-fg-2); }
+.mono-3 { background: var(--mono-bg-3); color: var(--mono-fg-3); }
+.mono-4 { background: var(--mono-bg-4); color: var(--mono-fg-4); }
+
+.inbox-group-label { color: var(--text-primary); font-size: 0.88rem; }
+.inbox-group-count { color: var(--text-secondary); font-size: 0.78rem; }
+
+/*
+ * §4.7's empty state. **"Inbox clear", not "no items"** — the difference between a finished job and
+ * a broken screen. The compose control stays on the page above it, because an empty inbox is
+ * exactly when you want to add to something.
+ */
+.inbox-clear {
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.inbox-clear-title {
+  color: var(--text-secondary);
+  font-size: var(--size-modal-title);
+  font-weight: 500;
+}
+
+.inbox-clear-line {
+  margin-block-start: 0.4rem;
+  color: var(--text-dim);
+  font-size: var(--size-micro);
+}
+
+/*
+ * Rows clear the touch floor at both widths. They are the primary target on this screen and were
+ * 6px of padding around a line of text — comfortably under it.
+ */
+.inbox-item {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 12px 2px;
+  min-height: var(--touch-row-min);
+  border-block-end: 1px solid var(--border-primary);
+}
+
+/* The last row's rule would draw a line under the group with nothing beneath it. */
+.inbox-item:last-child { border-block-end: 0; }
+
+.inbox-item:hover { background: var(--bg-secondary); }
+
+/* The kind is a word, not a colour or an icon alone — a folder in an inbox is a real item. */
+.inbox-item-kind {
+  color: var(--text-secondary);
+  flex: 0 0 3.2rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.inbox-item-name { color: var(--text-primary); font-size: 0.88rem; }
+.inbox-item.is-folder .inbox-item-name { color: var(--text-primary); font-weight: 500; }
+
+/* The shared filter bar. First instance: the Projects board. */
+.board-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.board-filter-field {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  max-width: 24rem;
+  padding: 7px 10px;
+  width: 100%;
+  flex: 0 1 24rem;
+  min-width: 0;
+}
+
+.board-filter-field:focus { border-color: var(--accent-teal); outline: none; }
+
+/* ---------------------------------------------------------------------------
+ * THE PROJECT FILTER — P11 U2's picker, given the styling it never had.
+ *
+ * **This block did not exist.** `project-filter.ts` shipped emitting seven class
+ * names and `tokens.css` matched none of them, so every rule below is a default
+ * the browser chose. That is the entire defect the operator reported on 2026-08-15 as
+ * *"a bunch of boxes and then a few spaces in another box… it cuts off and you
+ * can't scroll"* — and it is worth being precise about, because "add some CSS"
+ * and "this control was never styled" lead to different amounts of care.
+ *
+ * Three consequences, all measured on a 375x812 viewport before this was written:
+ *
+ *   1. `<label>` is `display: inline`. Sixty-six rows therefore laid out as
+ *      RUNNING TEXT — tick, name, tick, name — and wrapped like a paragraph, so
+ *      names broke mid-word (`op-bin-` / `logistics-1`). The rows were never rows.
+ *   2. No `max-height`, no `overflow`. The open list measured **1,287px tall in
+ *      an 812px viewport**, ending at y=1315. Everything past the fold was
+ *      unreachable: not scrolled off, simply absent.
+ *   3. The list was IN FLOW inside `.board-bar`, so opening it grew the bar and,
+ *      because the bar is `align-items: center`, stranded the Refresh button at
+ *      **y=650** in the middle of the list. One defect, presenting as two.
+ *
+ * The fix is the one the operator asked for — *"a scrollable drop down where within
+ * that scrollable drop down you can select the box"* — which is also the correct
+ * structure rather than a concession: a popover cannot displace what it sits over.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * The positioning context for the list below. Without it the absolute list would
+ * resolve against the nearest positioned ancestor — the pane — and a control that
+ * opens somewhere other than under its own summary is worse than one that pushes.
+ */
+.project-filter {
+  position: relative;
+  min-width: 0;
+}
+
+.project-filter-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--touch-row-min);
+  padding: 0 10px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  cursor: default;
+  /* The disclosure triangle is replaced by the caret below, which can be placed. */
+  list-style: none;
+  user-select: none;
+}
+
+/* Safari draws `summary`'s marker through a pseudo-element the standard property misses. */
+.project-filter-summary::-webkit-details-marker { display: none; }
+
+.project-filter-summary::after {
+  content: '▾';
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.project-filter[open] > .project-filter-summary {
+  border-color: var(--accent-teal);
+}
+
+.project-filter-summary:hover { background: var(--bg-hover); }
+
+/*
+ * **The popover.** `position: absolute` is the load-bearing declaration in this
+ * block: it takes the list out of `.board-bar`'s flow, which is what stops a
+ * sixty-six-row list from resizing the bar and displacing the controls beside it.
+ *
+ * `max-height` is expressed in `vh` rather than a fixed pixel count so the list is
+ * bounded by the SCREEN — the thing that actually runs out — on a phone and a
+ * desktop alike. Paired with `overflow-y: auto` it is what makes every project
+ * reachable; without the pair, `max-height` alone would merely clip them.
+ */
+.project-filter-list {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: var(--z-file-action-dropdown);
+  min-width: 14rem;
+  max-width: min(22rem, calc(100vw - 2rem));
+  max-height: min(60vh, 26rem);
+  overflow-y: auto;
+  /* Momentum scrolling inside a popover on iOS, and it keeps the board from scrolling with it. */
+  overscroll-behavior: contain;
+  padding: 0.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 50%);
+}
+
+/*
+ * `flex`, not `block` — the tick and the name must sit on one line and share it,
+ * which is the row that `display: inline` never made. `min-height` rather than
+ * padding alone so the target survives a one-character project name.
+ */
+.project-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--touch-row-min);
+  padding-block: 2px;
+  /* NOTE: `padding-inline-start` is set per row by script — it carries the nesting
+   * depth, which is data rather than style. Do not add one here; it would be
+   * overridden on every row and read as dead code. */
+  padding-inline-end: 0.6rem;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.project-filter-row:hover { background: var(--bg-hover); }
+
+/*
+ * `flex-shrink: 0` because a checkbox that has been squeezed to nine pixels by a
+ * long neighbour is a checkbox nobody can hit. The name yields instead — it has
+ * an ellipsis to fall back on and the tick has nothing.
+ */
+.project-filter-tick {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent-teal);
+  cursor: default;
+}
+
+/*
+ * **One line, ellipsised.** `nowrap` ends the mid-word breaking; `overflow: hidden`
+ * is what lets the row shrink at all.
+ *
+ * **`min-width: 0` was here and has been removed, because it does nothing.** The
+ * usual flexbox incantation is `min-width: 0` — a flex item's automatic minimum
+ * size otherwise refuses to shrink below its content — but that automatic minimum
+ * applies only while the item's `overflow` is `visible`, and this one's is not.
+ * `overflow: hidden` has already set it to zero.
+ *
+ * Not reasoned out: **measured**, after a mutation sweep removed `min-width: 0`
+ * and all twelve tests stayed green. Four combinations, one row, a 200-character
+ * name:
+ *
+ *     min-width: 0     overflow: hidden      row overflow    0px
+ *     min-width: auto  overflow: hidden      row overflow    0px
+ *     min-width: 0     overflow: visible     row overflow  963px
+ *     min-width: auto  overflow: visible     row overflow  963px
+ *
+ * The declaration that holds this row together is `overflow`, and the sweep was
+ * right to refuse to redden. Keeping a line the sweep cannot kill would have left
+ * a comment claiming a mechanism this file does not use.
+ */
+.project-filter-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+/*
+ * Sticky rather than scrolled away with the rows. With sixty-six projects the
+ * Clear that undoes a mistake would otherwise sit four screens down, reachable
+ * only by scrolling past everything you were trying to undo.
+ */
+.project-filter-clear {
+  position: sticky;
+  inset-block-end: 0;
+  display: block;
+  width: 100%;
+  margin-block-start: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  text-align: start;
+  font-family: var(--font-system);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 0;
+  border-block-start: 1px solid var(--border-primary);
+  border-radius: 0 0 4px 4px;
+  cursor: default;
+}
+
+.project-filter-clear:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+/* ---------------------------------------------------------------------------
+ * A25 — the slide-over. min(560px, 70%), 180ms translateX, xl shadow, left
+ * hairline, over a board that stays mounted and INTERACTIVE.
+ *
+ * There is no backdrop on purpose. A backdrop would swallow clicks on the board
+ * behind it, and reading a card while still dragging the ones behind it is the
+ * whole reason this is a slide-over rather than a modal.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * **Every value here is the annex's, by name.** The first version hard-coded `min(560px, 70%)`,
+ * `180ms` and a hand-mixed shadow — all four of which §C already defines as tokens
+ * (`--slide-over-width`, `--motion-slide-over`, `--shadow-xl`, `--z-slide-over`). Re-typing a token's
+ * value is how the design language drifts one "improvement" at a time, which is the exact failure §C
+ * exists to prevent.
+ */
+.card-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--slide-over-width);
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  transform: translateX(100%);
+  transition: transform var(--motion-slide-over) ease;
+  z-index: var(--z-slide-over);
+}
+
+/**
+ * **`hidden` has to win here too**, for the same reason it had to be spelled out for the panes
+ * above: `display: flex` on a class beats the user agent's `[hidden] { display: none }`, so the
+ * attribute the panel toggles was decorative. The closed panel stayed in the layout, parked one
+ * panel-width past the right edge, which pushed `document.scrollWidth` to 1841 on a 1280 viewport
+ * — a page that rubber-bands sideways onto nothing, on a board that has no business scrolling
+ * horizontally at all.
+ */
+.card-panel[hidden] { display: none; }
+
+.card-panel.is-open { transform: translateX(0); }
+
+/* Honour a reduced-motion preference: the panel still arrives, it just does not slide. */
+@media (prefers-reduced-motion: reduce) {
+  .card-panel { transition: none; }
+}
+
+/**
+ * The panel's contents. A flex column with `min-height: 0`, because the Tasks and Inbox panels host
+ * the real editor and CodeMirror needs a parent with a *resolved* height to scroll inside — a plain
+ * block would let it grow to its content and push the panel's own scrollbar instead of its.
+ */
+.card-panel-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px 18px;
+}
+
+/** The document's slot inside the panel. Takes whatever height is left under "View in Files". */
+.card-panel-doc {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.card-panel-doc .editor-surface { flex: 1 1 auto; min-height: 0; }
+/*
+ * **Both of the panel's header overrides are gone, and neither is missed.**
+ *
+ * `flex-wrap: wrap` was here because the panel is narrow and the path would otherwise force the
+ * header wider than the panel. It bought the width back by letting the row break wherever it liked,
+ * which is exactly the shifting header the operator reported. The path having its own row solves the
+ * same problem without a variable outcome. The `ellipsis` pair was a duplicate of `.pane-path`'s
+ * own rule, which applies here as it does everywhere.
+ */
+
+.card-panel-title {
+  color: var(--text-primary);
+  font-size: 1rem;
+  margin-bottom: 2px;
+}
+
+.card-panel-where {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-bottom: 14px;
+}
+
+.card-panel-list { margin-bottom: 14px; }
+
+/*
+ * THE ARRANGE STACK. Ruled 2026-08-21: *"I can see them all like in a stack and I can arrange the
+ * board top to bottom equals left to right."*
+ *
+ * Two lines per row rather than one. Four presses beside a folder name does fit on 390px, but only
+ * by squeezing the name to about half of what a column head gives it — and the name is the thing
+ * being arranged. Stacking them costs vertical room, which is the one thing a phone has spare.
+ */
+.arrange-hint {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-bottom: 2px;
+}
+
+.arrange-hint-dim { color: var(--text-dim); }
+
+.arrange-empty {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  margin-top: 12px;
+}
+
+.arrange-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.arrange-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+.arrange-row-name {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.arrange-row-index {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.arrange-row-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.arrange-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* 44px, the thumb floor the tab bar and the board rows take. This is a phone-first surface. */
+.arrange-move {
+  flex: 1 1 auto;
+  min-height: 44px;
+  font-family: inherit;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.arrange-move:hover:not(:disabled) { color: var(--text-primary); background: var(--bg-hover); }
+
+.arrange-move:disabled { opacity: 0.28; }
+
+.arrange-move:focus-visible {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+.card-panel-item {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.card-panel-item-kind {
+  color: var(--text-secondary);
+  flex: 0 0 3.2rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.card-panel-item-name { color: var(--text-primary); font-size: 0.85rem; }
+.card-panel-empty { color: var(--text-secondary); font-size: 0.8rem; }
+
+.card-panel-action {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 7px 12px;
+}
+
+/* ---------------------------------------------------------------------------
+ * §14 — the chatroom. The user's daily reading surface.
+ * ------------------------------------------------------------------------- */
+
+.chat-surface {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  /* The containing block for the floating jump-to-bottom control below. */
+  position: relative;
+}
+
+.chat-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 0.5rem 1.25rem;
+  border-block-end: 1px solid var(--border-primary);
+}
+
+/*
+ * The scroller is the only thing that scrolls, and the composer sits outside it. A composer inside
+ * the scrolling region moves away as the conversation grows, and the one thing that must never move
+ * is the box you are typing into.
+ */
+.chat-scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1.25rem;
+}
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: var(--measure);
+}
+
+.chat-message-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-block-end: 0.35rem;
+}
+
+.chat-author { font-size: var(--size-row); font-weight: var(--weight-emphasis); }
+.chat-number { font-size: var(--size-micro); color: var(--text-dim); }
+
+.chat-preamble { color: var(--text-secondary); }
+.chat-empty { color: var(--text-muted); font-size: var(--size-view-title); }
+
+/*
+ * The jump-to-bottom control. Floating over the scroller rather than in flow, so it does not move
+ * the conversation when it appears — a control that reflows the thing it points at is a control
+ * that moves the paragraph you were reading.
+ */
+.chat-jump {
+  position: absolute;
+  inset-block-end: 5.5rem;
+  inset-inline-end: 1.5rem;
+  z-index: var(--z-sticky-header);
+  padding: 0.35rem 0.7rem;
+  font-family: inherit;
+  font-size: var(--size-chip);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-teal);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  cursor: default;
+}
+
+.chat-jump[hidden] { display: none; }
+
+.chat-composer {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 0.75rem 1.25rem;
+  border-block-start: 1px solid var(--border-primary);
+}
+
+.chat-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  font-family: inherit;
+  font-size: var(--size-editor-body);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+
+.chat-post {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  padding: 0.45rem 0.9rem;
+  font-family: inherit;
+  font-size: var(--size-chip);
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.chat-post:hover { border-color: var(--accent-teal); }
+
+/* ---------------------------------------------------------------------------
+ * §8 — rendered markdown. Agent-written content, confined.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * §8: rendered content is CONFINED so agent-written content can never draw over app chrome. A
+ * message with a wide table or an absolutely-positioned construct stays inside its own box.
+ */
+.md-rendered {
+  contain: content;
+  isolation: isolate;
+  overflow-wrap: anywhere;
+}
+
+.md-paragraph { margin: 0 0 0.6rem; }
+.md-heading { margin: 0.9rem 0 0.4rem; font-weight: var(--weight-emphasis); }
+.md-list { margin: 0 0 0.6rem; padding-inline-start: 1.2rem; }
+.md-quote {
+  margin: 0 0 0.6rem;
+  padding-inline-start: 0.8rem;
+  border-inline-start: 2px solid var(--border-primary);
+  color: var(--text-secondary);
+}
+
+.md-code {
+  margin: 0 0 0.6rem;
+  padding: 0.6rem 0.8rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--size-micro);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------------------------------------------------------------------------
+ * **THE INLINE MARKS, which drew nothing at all until 2026-08-16.**
+ *
+ * `em`, `strong`, `s` and inline `code` were the only nodes this renderer built without a class,
+ * and no element selector covered them either — so **bold, italic and `backticks` rendered as
+ * ordinary body text** in the chatroom, which is where the M-threads are read.
+ *
+ * The three values below were declared for exactly this and referenced by nothing:
+ * `--inline-code-text` (annotated "warm tan"), `--emphasis`, and `--weight-strong`, whose own
+ * comment says *"ONLY prose h1 and strong"*. Found by the sweep's markup/stylesheet pairing pass.
+ *
+ * Inline code takes the mono face and the warm tan but NOT `--bg-tertiary`: a ground inside a
+ * sentence breaks the line's rhythm, and the fenced block above already owns that treatment.
+ * ------------------------------------------------------------------------- */
+
+.md-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;   /* mono runs large beside the system face at the same nominal size */
+  color: var(--inline-code-text);
+}
+
+.md-strong {
+  font-weight: var(--weight-strong);
+  color: var(--text-primary);
+}
+
+.md-em {
+  font-style: italic;
+  color: var(--emphasis);
+}
+
+/* Struck text is struck; it does not also need a colour saying so twice. */
+.md-strike { text-decoration: line-through; color: var(--text-dim); }
+
+.md-table { border-collapse: collapse; margin: 0 0 0.6rem; }
+.md-table th,
+.md-table td {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-primary);
+  font-size: var(--size-context-menu);
+}
+.md-table th { background: var(--bg-tertiary); text-align: start; }
+
+.md-rule { border: 0; border-block-start: 1px solid var(--border-primary); margin: 0.9rem 0; }
+.md-link { color: var(--accent-teal); }
+
+/* A destination the app refused. The words stay; the link does not. */
+.md-inert-link { color: var(--text-secondary); text-decoration: underline dotted; }
+
+.md-image { max-width: 100%; border-radius: var(--radius-sm); }
+
+/*
+ * §12's collapsed properties block. Styled to match `.cm-soil-frontmatter` in `editor.css` — mono,
+ * dim, tertiary ground, one rule down the side — because the same block seen in the editor and in a
+ * rendered view should read as the same thing. §19's "they can never disagree" is about the parse;
+ * looking alike is how a reader can tell that from the outside.
+ */
+.md-frontmatter {
+  margin: 0 0 0.9rem;
+  font-size: var(--size-micro);
+  color: var(--text-dim);
+  background: var(--bg-tertiary);
+  border-inline-start: 2px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+/* The disclosure itself. `cursor: default` because it is a control, not selectable prose. */
+.md-frontmatter-summary {
+  padding: 0.35rem 0.8rem;
+  cursor: default;
+  user-select: none;
+  font-size: var(--size-micro);
+  color: var(--text-muted);
+}
+
+.md-frontmatter-body {
+  margin: 0;
+  padding: 0 0.8rem 0.6rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+
+/* Never fetched, and it says so rather than leaving a gap where a picture was. */
+.md-image-placeholder {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  font-size: var(--size-micro);
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+/* ==================================================================================== *
+ * §18.3 — THE TAB BAR MOVES TO THE BOTTOM ON A PHONE, AND LEAVES IN THE DOCUMENT
+ * §18.2 — AND EVERY PERSISTENT BAR RETREATS WHEN YOU SCROLL DOWN INTO CONTENT
+ *
+ * ruled 2026-08-13: *"I don't love a persistent anything on an app these days if we can
+ * help it."* One mechanic, everywhere. The decision about WHEN lives in
+ * `core/chrome-retreat.ts`; everything here reacts to `data-chrome` on the root, exactly as
+ * the mobile rules above react to `data-layout`. Nothing in this file decides anything.
+ * ==================================================================================== */
+
+:root {
+  /*
+   * Taller than the desktop bar's 36 px, and the reason is the thumb rather than taste. This is
+   * the app's primary navigation and it sits at the screen edge where horizontal room is free,
+   * so the only cost of a comfortable target is 12 px of a surface that is about to hide anyway.
+   * It clears WCAG 2.2 SC 2.5.8 (24 px, AA) and meets SC 2.5.5 / Apple's HIG at 48 > 44 —
+   * unlike the tree, where §18.6 records why 40 is the right trade and this one is not.
+   */
+  --tab-bar-height: 48px;
+  /*
+   * Fast enough not to feel like waiting for the app, slow enough to read as the bar moving
+   * rather than the bar disappearing — which matters, because a person needs to learn that an
+   * upward scroll brings it back and cannot learn that from something that blinks.
+   */
+  --chrome-transition: 180ms;
+}
+
+/*
+ * The panes take the whole viewport on a phone; the bar sits ON them rather than beside them.
+ *
+ * **This is what lets the retreat animate on the compositor.** The alternative — insetting the
+ * pane by the bar and animating that inset — changes layout on every frame of a gesture that is
+ * already the most performance-sensitive thing a phone does. Scrolling surfaces get trailing
+ * padding instead, so the last row can still be scrolled clear of the bar.
+ */
+:root[data-layout='mobile'] .files-pane,
+:root[data-layout='mobile'] .tasks-pane {
+  inset: 0;
+}
+
+/*
+ * **Back to a bar across the bottom.** The rail stops being a box at this width (see `.app-rail`
+ * below), so this positions against the viewport exactly as it did before the tabs lived in a rail.
+ * `position` is restated rather than inherited from the base rule, which is `static` on a desktop.
+ */
+:root[data-layout='mobile'] .tabs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: 0;
+  height: auto;
+  min-height: var(--tab-bar-height);
+  padding: 0 4px;
+  /* The home indicator. `viewport-fit=cover` is already set on the shell's viewport meta. */
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+  gap: 0;
+  border-block-start: 1px solid var(--border-primary);
+  border-block-end: 0;
+  transition: transform var(--chrome-transition) ease;
+}
+
+:root[data-layout='mobile'] .tab {
+  flex: 1 1 0;
+  min-height: var(--tab-bar-height);
+  padding: 0 4px;
+  font-size: 0.78rem;
+  /* The active marker moves to the edge the bar is attached to, so it still reads as a tab. */
+  border-block-end: 0;
+  border-block-start: 2px solid transparent;
+}
+
+:root[data-layout='mobile'] .tab.is-active {
+  border-block-start-color: var(--accent-teal);
+}
+
+/*
+ * Trailing room so the last row is reachable above the bar. Inside the scrolling box rather than
+ * on the pane, so it is content you scroll into and not a dead strip that appears when the bar
+ * leaves.
+ */
+:root[data-layout='mobile'] .files-sidebar > .tree,
+:root[data-layout='mobile'] .board-host {
+  padding-block-end: calc(var(--tab-bar-height) + 1rem);
+}
+
+/*
+ * **The project filter spans the bar on a phone instead of hanging off its summary.**
+ *
+ * On the desktop the popover is anchored to the summary, which is correct: it opens under the thing
+ * you clicked. On a 375px screen that summary sits after the word "Showing", so a list anchored to
+ * it starts around x=95 and its 22rem would run to 438 — sixty-three pixels off the right edge, and
+ * the rows nearest the edge are the ones a right thumb reaches first.
+ *
+ * **Done by moving the positioning context rather than by adding a width.** `.project-filter` goes
+ * `static` and `.board-bar` becomes the positioned ancestor, so the same `inset-block-start: calc(100%
+ * + 4px)` now means *below the bar* rather than *below the summary*, and `inset-inline` can span it.
+ * No fixed positioning, no measured offsets, and no second copy of the popover's own styling — every
+ * value not named here is still the one above.
+ */
+/*
+ * **THE CARD IS A SCREEN ON A PHONE, NOT A PANEL.** The operator's number-one complaint.
+ *
+ * Measured before this rule: the slide-over was 262px of a 390px viewport — 70% — anchored right,
+ * leaving a 112px sliver of board that could not be read and could not be dismissed except by
+ * hitting one small strip. *"It gets crunched."*
+ *
+ * `inset: 0` and no border, so there is no sliver and nothing behind it to aim at. **Tasks and Inbox
+ * only** — `.is-fullscreen-phone` is set by the two panels that opted in; Projects keeps its side
+ * panel at both widths, which is the operator's own distinction.
+ *
+ * The transform stays: it is the same slide, from the same direction, at the same 180ms. What
+ * changes is where it stops.
+ */
+:root[data-layout='mobile'] .card-panel.is-fullscreen-phone,
+:root[data-layout='mobile'] .card-panel.is-fullscreen-both,
+/*
+ * **Full screen at DESKTOP width too — and since 2026-08-19 nothing asks for this.**
+ *
+ * the operator ruled it on 2026-08-16 for the Inbox (*"3 yes"*): filing is that screen's whole job and
+ * there is no board behind it worth keeping in view. They reversed it on 2026-08-19 having used it —
+ * *"they should be side panels for desktop"* — because the Inbox now opens documents **and**
+ * folders, and two behaviours in one list reads as broken even when it is deliberate.
+ *
+ * Kept rather than deleted, with its option in `card-panel.ts`: the argument for it was real and a
+ * filing surface may want it again. **A review flagged this comment as telling the old story** while
+ * the code had moved on — this build's signature failure, and worth the correction.
+ *
+ * **It fills the PANE, so the rail stays.** `inset: 0` is against `.tasks-pane`, which starts where
+ * the sidebar ends. Covering the rail as well would mean `position: fixed`, which escapes the pane's
+ * `overflow: hidden` — and that clip is what stops the mid-close panel, translated a full width
+ * right for 180ms, from widening the document into a page that scrolls sideways onto nothing. The
+ * navigation staying put is the better answer anyway; the back control is the exit, not the only one.
+ */
+.card-panel.is-fullscreen-both {
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  border-left: 0;
+  border-radius: 0;
+  /* Above the tab bar: a screen covers the tabs, which is what makes the back control the way out. */
+  z-index: calc(var(--z-slide-over) + 1);
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+}
+
+/*
+ * The back control, and it exists only where it is needed. On a desktop the panel has an outside to
+ * click and a visible board beside it; on a phone it is the whole screen and this is the exit.
+ */
+.card-panel-back { display: none; }
+
+/*
+ * The way out. On a full-screen panel there is no outside to click, so this is the exit — which is
+ * why it appears wherever the panel is full screen, now including a desktop Inbox.
+ */
+:root[data-layout='mobile'] .card-panel.is-fullscreen-phone .card-panel-back,
+.card-panel.is-fullscreen-both .card-panel-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch-row-min);
+  padding: 0 var(--space-2) 0 0;
+  font-family: var(--font-system);
+  font-size: var(--size-row);
+  color: var(--accent-teal);
+  background: transparent;
+  border: 0;
+  cursor: default;
+}
+
+:root[data-layout='mobile'] .board-bar { position: relative; }
+:root[data-layout='mobile'] .project-filter { position: static; }
+
+:root[data-layout='mobile'] .project-filter-list {
+  inset-inline: 8px;
+  max-width: none;
+  /* Shorter than the desktop's 60vh: the tab bar owns the bottom of this screen, and a list that
+   * ends underneath it looks scrollable when it has already finished. */
+  max-height: 50vh;
+}
+
+/*
+ * Settings is pinned at the foot of the tree screen, which is now where the tab bar is. Lifted
+ * above it and retreating with it — §18.2 says *every* persistent bar, and a control pinned to
+ * the bottom edge is one whether or not it is called a bar.
+ */
+:root[data-layout='mobile'] .sidebar-strip {
+  position: absolute;
+  inset-inline: 0;
+  /*
+   * **The safe-area term is the one that must not be dropped.** It is what lifts the strip clear of
+   * the home indicator on the user's phone. A strip that re-states this offset without it looks
+   * correct in every desktop browser and sits under the indicator on the only device that matters,
+   * so it is proven by measurement rather than by reading this line.
+   */
+  inset-block-end: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
+  z-index: 2;
+  min-height: 40px;
+  background: var(--bg-primary);
+  transition: transform var(--chrome-transition) ease;
+}
+
+/*
+ * The Settings strip above needs a positioned ancestor to pin against, and `.files-sidebar` is it.
+ * It is `position: absolute` on a phone now — it became the tree screen when the rail's box went
+ * away — so it already establishes one. The `relative` that used to be stated here would fight it.
+ */
+
+/*
+ * §18.3 — **absent entirely in the document view.** Not hidden by the retreat, which is a state
+ * an upward scroll undoes: there is no arrangement of gestures in a document that should produce
+ * the four tabs. *"What you need there is the way back, not the way sideways."*
+ *
+ * `display: none` rather than a transform, so it is out of the accessibility tree too — a tab
+ * that is off screen but still focusable is a tab you can reach by keyboard and cannot see.
+ */
+:root[data-layout='mobile'][data-document-view='true'] .tabs {
+  display: none;
+}
+
+/* ---- The retreat itself. Transform only: no layout, no paint of anything but the bar. ---- */
+
+:root[data-layout='mobile'][data-chrome='retreated'] .tabs {
+  transform: translateY(100%);
+}
+
+:root[data-layout='mobile'][data-chrome='retreated'] .sidebar-strip {
+  /* Past its own height AND the bar's, so it clears the screen rather than landing on the bar. */
+  transform: translateY(calc(100% + var(--tab-bar-height)));
+}
+
+/* The document's own top bar — §18.2 names it alongside the tab bar. It goes up, not down. */
+:root[data-layout='mobile'] .files-pane[data-screen='document'] .files-screen-back {
+  transition: transform var(--chrome-transition) ease;
+}
+
+:root[data-layout='mobile'][data-chrome='retreated'] .files-pane[data-screen='document'] .files-screen-back {
+  transform: translateY(-100%);
+}
+
+/*
+ * A34's neighbour: nothing above may move for someone who has asked the system not to animate.
+ * The bar still goes — §18.2 is about screen space, not about motion — it simply arrives there
+ * without travelling.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-layout='mobile'] .tabs,
+  :root[data-layout='mobile'] .sidebar-strip,
+  :root[data-layout='mobile'] .files-pane[data-screen='document'] .files-screen-back {
+    transition: none;
+  }
+}

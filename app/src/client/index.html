@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <!--
+      THE BUILD STAMP. Spec §15:
+
+        "The built shell carries a build stamp (a meta tag with the build timestamp or hash) so
+        that freshness is machine-checkable: fetch the shell, read the stamp, know exactly which
+        build the phone is running. Without it, 'is the fix deployed?' is unanswerable without the
+        phone in hand."
+
+      That last sentence is the whole reason. An installed web app on iOS is RESUMED, never
+      relaunched, so a deployed fix can sit undelivered indefinitely with no way to tell from the
+      Mac. The placeholder in the meta tag below is replaced at build time.
+    -->
+    <meta name="soil-build" content="__BUILD_STAMP__" />
+
+    <!--
+      No CSP meta tag. Spec §8 requires the full policy "as a response header on every response
+      including errors — not a meta tag." A meta tag cannot express frame-ancestors, arrives after
+      the parser has already begun, and covers nothing that is not this document. The header is set
+      by `securityHeaders()` and pinned by the CSP gate.
+    -->
+
+    <title>Soil Viewer</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!--
+      **`apple-touch-icon` is not a duplicate of the manifest's icons — it is the one iOS reads.**
+      Safari ignores the manifest's `icons` array for Add to Home Screen and looks for this link
+      alone; without it iOS screenshots the page and uses that. §13.8 makes the install load-bearing
+      rather than decorative — it is the only documented exemption from WebKit deleting a site's
+      stored data after seven idle days, and the retained buffer that rescues an unsaved edit lives
+      in that storage. An install that looks like a bookmark is one nobody makes.
+
+      180 is the iPhone @3x size. iOS downscales it for every smaller slot, and applies its own
+      squircle mask — which is why `tools/make-icons.py` crops the source to a full-bleed square
+      instead of handing over the artwork's own rounded corners.
+
+      These paths are NOT content-hashed. Vite rewrites asset URLs it finds in HTML and in CSS; it
+      does not parse the manifest's JSON, so the icons it names have to exist at stable paths. They
+      live in `public/`, copied to the dist root verbatim, and `asset-map.ts` serves them `no-cache`
+      because they are unhashed — correct, and the reason the file names carry no hash.
+    -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png" />
+  </head>
+  <body>
+    <!--
+      The single mount point. Everything else is built with createElement / textContent /
+      setAttribute — spec §8's DOM-construction-only rule, which is lint-enforced across all of
+      src/ rather than src/client alone.
+    -->
+    <div id="app"></div>
+    <noscript>Soil Viewer needs JavaScript to display your files.</noscript>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

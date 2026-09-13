@@ -1,0 +1,291 @@
+name: CI
+
+on:
+  push:
+    # ---------------------------------------------------------------------------------------------
+    # `phase/**` REMOVED 2026-08-09, on cost. This reverses a decision from the security review's P2 review and
+    # the reversal is argued rather than quietly taken.
+    #
+    # CONDITION 4 SAID: CI triggered only on `main` and pull requests, so a push to
+    # `phase/2-server` ran nothing — CI first saw the code AFTER it landed on main, which is not a
+    # gate. "Twenty socket tests skip in the sandbox and throw in CI; that design only pays if CI
+    # actually runs on the branch."
+    #
+    # WHAT CHANGED: the premise was that local runs are incomplete, because the agent sandbox cannot
+    # bind sockets and silently skips twenty tests. That has not been true for some time — every
+    # local run this build now reports is a full one, sandbox disabled, and the count is stated with
+    # every commit (1,407 passing, 0 skipped). The gap CI existed to cover is covered before the
+    # push rather than after it.
+    #
+    # WHAT IT COST: this runner is `macos-latest`, which GitHub bills at **10×**. 86 runs in three
+    # days — roughly 1,400 billed minutes — took the account to 90% of its monthly allowance with
+    # three weeks to go. At the rate this build commits, the remaining budget is about half a day.
+    #
+    # THE TRADE, STATED: a defect that appears only on a clean machine now reaches `main` before
+    # anything catches it. That is a real loss and it has already happened once — a watcher test
+    # that passes on this Mac and cannot pass on a virtualised runner. Mitigated by
+    # `workflow_dispatch` below: fire a full run by hand before a phase merge, which is the moment
+    # it matters and costs one run instead of forty.
+    # ---------------------------------------------------------------------------------------------
+    branches: [main]
+    # -----------------------------------------------------------------------------------------------
+    # DOCUMENTATION-ONLY COMMITS RUN NOTHING. Added 2026-08-19, on cost.
+    #
+    # `build/` in this repo is the WRITTEN RECORD — briefs, handoffs, the spec, the security review's reviews — not
+    # a build output. Nothing under it is read by a test. A commit that touches only those paths
+    # cannot change what any check does, so paying ten times the going rate to prove that is a run
+    # bought for nothing.
+    #
+    # It has already happened: `Log the operator's second round of inbox notes` started a full run on
+    # 2026-08-19 and was cancelled thirty seconds in, by hand, because someone happened to be
+    # watching. This is that fix, done properly.
+    #
+    # **Scoped to whole directories and to top-level markdown**, deliberately. `app/**` is untouched
+    # by this list — a `.md` fixture inside the test tree is a test input, and skipping a run because
+    # someone edited one would be the false economy this list exists to avoid.
+    # The build-record and archive directories were listed here until 2026-08-31; neither exists in
+    # this repository any more. A paths-ignore entry for a path that cannot occur is a rule nobody
+    # can trip, which reads as protection and is not.
+    paths-ignore:
+      - '*.md'
+  pull_request:
+  # -------------------------------------------------------------------------------------------------
+  # ONE RUN PER MERGE. Added 2026-08-19, on cost, after a day that spent seven.
+  #
+  # The standing practice had been: fire this by hand on the branch, read it, merge, and then let the
+  # push to `main` run the identical code a second time. Three merges on 2026-08-19 therefore bought
+  # six runs, three of which tested something already tested — at `macos-latest`, which GitHub bills
+  # at 10x.
+  #
+  # **So the run on the merge IS the gate now, and the manual one is for when it is worth it.** What
+  # the CI run uniquely proves is "this works on a clean machine", and that is equally true nine
+  # minutes after the merge as nine minutes before — the local suite is full and green before any
+  # merge, sandbox disabled, which is the condition the branch-trigger removal above already relies
+  # on.
+  #
+  # **What that trades, stated:** a defect that only appears on a clean machine now reaches `main`
+  # before anything catches it, and is fixed forward. That is the same trade already accepted above
+  # for branch pushes. Keeping the `main` trigger rather than the manual one is deliberate: it is what
+  # keeps a real pass/fail mark on `main`, and a red X there meaning something is the thing this build
+  # spent a week earning back.
+  #
+  # **Fire it by hand when the change is one a clean machine could plausibly break** — anything
+  # touching the build, the bundle, native paths, or CI itself. Not for ordinary feature work.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# =====================================================================================================
+# LINUX WAS TRIED ON 2026-08-22 AND ONLY HALF OF IT STUCK. The operator: *"Let's try a Linux run on the
+# next CI. If we run into issues we'll go back to Mac."* We ran into issues.
+#
+# `macos-latest` bills at 10x and `ubuntu-latest` at 1x, so the prize was real. **`bundle-provenance`
+# moved and stayed** — it rebuilds the committed bundle and compares, and the bytes matched, which
+# also happens to prove the build is deterministic across platforms.
+#
+# **`checks` came back, and the reason is worth keeping.** Thirteen unit tests failed on Linux, and
+# not one of them was a product defect. They fail because they are **about macOS**:
+#
+# | What failed | Why |
+# |---|---|
+# | `chflags` immutable-file tests | `chflags` is a macOS binary. `spawn chflags ENOENT` |
+# | Case-insensitive rename and project tests | They assert that `notes.md` and `Notes.md` are one file, which is true on their volume and false on ext4 |
+# | The NFC normalization rename | Same family — a rename no string comparison catches |
+# | The mock soil's own safety rail | It refuses a path with fewer than three segments so a mistake cannot reach anywhere important. Linux hands it `/tmp/mock-soil-test-x`, which is two |
+# | Three §13.8 entity-token refusals | The "an agent replaced this file underneath you" tests, which are the most important ones in the build |
+#
+# **So the suite is macOS-coupled exactly where it matters most.** Making it pass on Linux would mean
+# skipping those tests there — which is not a saving, it is switching off the data-safety gate to
+# make a bill smaller. The alternative is porting them honestly, which is real work and has not been
+# asked for.
+#
+# **If the bill needs cutting further, the browser suite is where the money is**, not the runner.
+# =====================================================================================================
+jobs:
+  checks:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install exactly what the lockfile says
+        run: npm ci --ignore-scripts --no-offline
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # **Before the unit tests, because two of them read the built bundle.** Added 2026-08-16 after
+      # this job failed twice on `main` while every local run was green.
+      #
+      # `client-bundle.test.ts` is the gate that proves no Node builtin reaches the browser, and it
+      # FAILS rather than skips when `dist/` is absent — deliberately, because a skip is
+      # indistinguishable from a pass in a summary line. On a developer's machine `dist/` is already
+      # there from the last e2e run, so the suite passed locally and could not pass on a fresh
+      # checkout. The test's own comment said `npm run ci` builds first; it did not, and that has
+      # been corrected in `package.json` alongside this.
+      - name: Build, so the bundle gates have a bundle
+        run: npm run build
+
+      - name: Unit tests
+        run: npm run test
+
+      # Browser tests arrive with the client in P3; `test/e2e/` does not exist before then and
+      # Playwright exits non-zero when it finds no tests, which would make every phase gate
+      # before P3 impossible to pass. The guard is on the DIRECTORY rather than a
+      # `--pass-with-no-tests` flag on the script: a flag would permanently mask a suite that
+      # silently disappeared, whereas this turns itself on the moment the first spec lands and
+      # shouts in the meantime.
+      # Cached. Chromium + WebKit is a large download and it was being fetched on every single run —
+      # on a runner billed at 10×, which made it one of the more expensive lines in this file.
+      - name: Cache test browsers
+        if: hashFiles('app/test/e2e/**/*.spec.ts') != ''
+        uses: actions/cache@v4
+        with:
+          # macOS keeps its browsers here; Linux would use `~/.cache/ms-playwright`. A stale path does
+          # not fail the run — it silently misses, re-downloads Chromium and WebKit every time, and
+          # quietly becomes one of the more expensive lines in this file again.
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('app/package-lock.json') }}
+
+      - name: Install test browsers
+        if: hashFiles('app/test/e2e/**/*.spec.ts') != ''
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Browser tests
+        if: hashFiles('app/test/e2e/**/*.spec.ts') != ''
+        run: npm run test:e2e
+
+      - name: Say so when there are no browser tests
+        if: hashFiles('app/test/e2e/**/*.spec.ts') == ''
+        run: |
+          echo "::warning title=No browser tests::test/e2e contains no specs, so the browser suite did not run. P3 adds them and this step must stop appearing. If you are past P3 and still seeing this, the suite has gone missing."
+
+  # -------------------------------------------------------------------------------------------------
+  # THE BYTE-FIDELITY GATE, added 2026-08-31 — and it should have been here from the start.
+  #
+  # "Your files come back exactly as you left them" is the first commitment on the front page and the
+  # reason the editor is built the way it is. Until this job existed, **nothing enforced it on a
+  # change**: the gate ran only when someone remembered to run it by hand, which is the same as a
+  # control that is off.
+  #
+  # It is a separate job rather than a step in `checks` because it needs a generated tree of its own
+  # and both browser engines, and because a failure here means something different from a failing
+  # unit test — it means the editor altered a document.
+  #
+  # The three negative controls inside the suite are the reason this is worth four minutes: they run
+  # three deliberately lossy editors over the same corpus and require the comparison to find exactly
+  # the files each one damages. An instrument that reports everything as fine is indistinguishable
+  # from one that has stopped measuring, and the second is worse than having none.
+  # -------------------------------------------------------------------------------------------------
+  byte-fidelity:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci --ignore-scripts --no-offline
+
+      - name: Cache test browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('app/package-lock.json') }}
+
+      - name: Install test browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      # The tree is generated, never a real one. `SOIL_MOCK_DIR` keeps it inside the runner's
+      # workspace so it cannot collide with anything a developer has at the default location.
+      - name: Build the fake tree
+        run: npm run mock:soil -- "$RUNNER_TEMP/soil-viewer-mock"
+
+      # The committed probes are half the denominator; this samples the other half out of the tree
+      # above. `corpus.cjs` throws loudly if either half is missing rather than scoring a smaller
+      # denominator as a higher percentage.
+      - name: Build the sampled corpus
+        env:
+          SOIL_MOCK_DIR: ${{ runner.temp }}/soil-viewer-mock
+        run: npm run harness:corpus
+
+      - name: Round-trip gate, both engines
+        env:
+          SOIL_MOCK_DIR: ${{ runner.temp }}/soil-viewer-mock
+        run: npm run harness:gate
+
+  bundle-provenance:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci --ignore-scripts --no-offline
+
+      # The client entry does not exist until P3, and `vite build` fails hard on a missing
+      # entry module — so this whole job cannot pass before then. Guarded at STEP level, not
+      # job level: a job-level `if` is evaluated before checkout, when hashFiles can only ever
+      # return empty. Same self-expiring shape as the browser-test guard above.
+      - name: Rebuild the committed bundle
+        if: hashFiles('app/src/client/index.html') != ''
+        run: npm run build
+
+      # REPLACED 2026-08-07 after the P3 fresh-eyes review.
+      #
+      # This step used to run `git status --porcelain -- dist` to prove the committed bundle matched
+      # source. It has now failed to mean anything TWICE, in two different ways: first it checked
+      # ../dist, a directory the build never writes to; then, once that was fixed, app/dist was
+      # added to .gitignore — so the porcelain output is ALWAYS empty and the check passed
+      # unconditionally again. spec §2 made it the whole justification for committing a build
+      # artifact, and the artifact is not committed at all.
+      #
+      # The honest replacement checks what is actually true now: the build produces the artifacts
+      # the server needs, and the shell carries a real build stamp. `loadDist` refuses to start
+      # without either, so this asserts the same guarantee at the point CI can see it.
+      #
+      # If dist/ is ever committed again this step is the wrong one and the porcelain check becomes
+      # correct — but it must be re-verified against a real diff, not re-added on faith.
+      - name: The build produces a servable bundle
+        if: hashFiles('app/src/client/index.html') != ''
+        run: |
+          test -f dist/index.html || { echo "::error::No dist/index.html after build."; exit 1; }
+          if grep -q '__BUILD_STAMP__' dist/index.html; then
+            echo "::error::The shell shipped with an unreplaced build stamp placeholder."
+            echo "The transformIndexHtml plugin did not run. 'Is the fix deployed?' becomes"
+            echo "unanswerable, which is the question the stamp exists to answer."
+            exit 1
+          fi
+          test -n "$(ls dist/assets 2>/dev/null)" || { echo "::error::No built assets."; exit 1; }
+          echo "Bundle present and stamped."
+
+      - name: Say so when there is no bundle to check
+        if: hashFiles('app/src/client/index.html') == ''
+        run: |
+          echo "::warning title=No bundle provenance check::src/client has no entry point, so the committed bundle was not verified. P3 creates it. spec §2.5 makes this check the entire justification for committing a build artifact — if you are past P3 and still seeing this, the check is not running."

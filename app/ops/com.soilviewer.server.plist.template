@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Soil Viewer — user LaunchAgent, TEMPLATE. Spec §2.1.
+
+  Do not install this file as it is. The double-underscored placeholders below are filled in by
+  ops/install-always-on.sh with this machine's paths, and the result is written to
+  ~/Library/LaunchAgents/. That installed copy is what runs. Editing this template changes nothing
+  until the installer is run again. (The installer refuses to install anything that still carries a
+  placeholder — which is also why this comment does not spell one out.)
+
+  A user agent, never a system daemon: it runs as you, while you are logged in. With FileVault on,
+  the app returns after a reboot once the disk is unlocked — not before. A daemon would buy nothing.
+
+  Every path is absolute because launchd inherits almost nothing from a login shell — a bare
+  `node` does not resolve. Both output streams go to files in the state directory: the startup
+  banner names the token file and never a token (§7), so capturing stdout is safe, and stderr is
+  the crash trace §2.1 exists to preserve.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__LABEL__</string>
+
+  <!-- The BUILT server: the shipped product is the built bundle plus the zero-dependency Node server. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__APP__/dist-server/main.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__APP__</string>
+
+  <!-- All configuration through environment variables — the same ones the server reads from a shell. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>SOIL_PORT_LOCAL</key>
+    <string>__PORT_LOCAL__</string>
+    <key>SOIL_PORT_TAILNET</key>
+    <string>__PORT_TAILNET__</string>
+    <key>SOIL_STATE_DIR</key>
+    <string>__STATE_DIR__</string>
+__TAILNET_BLOCK__
+__BROWSE_BLOCK__
+  </dict>
+
+  <!-- Start at login; restart if it ever stops. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__STATE_DIR__/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__STATE_DIR__/launchd.err.log</string>
+</dict>
+</plist>

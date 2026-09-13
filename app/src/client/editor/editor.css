@@ -1,0 +1,337 @@
+/*
+ * The editing surface. Spec §12 and annex §C.
+ *
+ * Every value here is a token from `tokens.css`, transcribed at P3 from the binding annex. Nothing
+ * in this file invents a colour or a size — the design language is inherited verbatim, and a
+ * one-off hex here is how a design language stops being one.
+ *
+ * **There is one surface and no reading view.** So there is no second stylesheet to keep in sync
+ * with this one, which is the point: two rendering paths that must stay pixel-identical is how the
+ * old app's preview came to disagree with its editor, and that disagreement is why 62% of damaged
+ * files still looked correct.
+ */
+
+.cm-editor {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-editor);
+  /*
+   * **400, not 300, and this is most of what "it looks a little jank" was.**
+   *
+   * Light weight at 14px on a dark ground reads thin and washed out — it is a display weight being
+   * asked to carry body text. Typora's GitHub theme sets normal, Apple Notes sets normal, and the
+   * difference side by side is larger than the size change below.
+   */
+  font-weight: 400;
+  /*
+   * **18px, deliberately LARGER than the theme this was matched to.**
+   *
+   * The GitHub theme is 16px and the editor hit that exactly — measured in the browser, not read off
+   * this file. The operator looked at it twice and said it still read small, so this is a considered
+   * overshoot rather than a correction: *"I still think we should go a little bit bigger."*
+   *
+   * **One number, because everything else is relative.** Headings are `em`, code is `em`, the line
+   * height is unitless — so the theme's proportions survive intact and dialling this back is a
+   * one-line change rather than a re-tune.
+   */
+  font-size: 1.125rem;
+  line-height: var(--editor-line-height);
+  height: 100%;
+}
+
+/* The 720px measure, centred. Prose, not code. */
+/*
+ * `font-family` is repeated here rather than inherited from `.cm-editor`, and that is not
+ * redundancy: CodeMirror's own base theme sets `.cm-content { font-family: monospace }`, which wins
+ * over an inherited value. Without this line the whole surface renders as code — which is what the
+ * first browser run showed.
+ */
+.cm-editor .cm-content {
+  max-width: var(--editor-measure);
+  margin: 0 auto;
+  /* The theme's 30px of air around the text, and the tall foot that keeps the last line reachable. */
+  padding: 30px 30px 40vh;
+  caret-color: var(--accent-teal);
+  font-family: var(--font-editor);
+  font-weight: 400;
+}
+
+/* The focus ring belongs to the app's own chrome, not to a browser default outline. */
+.cm-editor.cm-focused {
+  outline: none;
+}
+
+.cm-editor .cm-selectionBackground,
+.cm-editor ::selection {
+  background: var(--selection-bg);
+}
+
+.cm-editor .cm-cursor {
+  border-left-color: var(--accent-teal);
+}
+
+/*
+ * --- Headings. The GitHub theme's proportions, identical whether or not the caret is on the line.
+ *
+ * The line heights are the theme's own per level — it tightens as the size grows, which is what
+ * stops a 36px h1 from opening a hole above the paragraph after it.
+ */
+.cm-soil-h1 { font-size: var(--editor-h1-size); font-weight: 600; line-height: 1.2; }
+.cm-soil-h2 { font-size: var(--editor-h2-size); font-weight: 600; line-height: 1.225; }
+.cm-soil-h3 { font-size: var(--editor-h3-size); font-weight: 600; line-height: 1.43; }
+.cm-soil-h4 { font-size: var(--editor-h4-size); font-weight: 600; }
+.cm-soil-h5 { font-weight: 600; }
+.cm-soil-h6 { font-weight: 600; color: var(--text-secondary); }
+
+/*
+ * **Air around a heading, which is half of what "well spaced" means.** The theme gives every level
+ * 1rem above and below; without it a 36px h1 sits hard against the paragraph before it and the
+ * document reads as one column of text rather than as sections.
+ *
+ * On the line, not on an inline span: these are line decorations, so the space belongs to the whole
+ * row. An inline margin would move the text and leave the line box where it was.
+ *
+ * **`padding`, NOT `margin`, and that distinction is a real bug rather than a preference.** With
+ * `margin-block` here, clicking in the document put the caret in the **wrong place** — CodeMirror
+ * maps a click to an offset through its own height map, and margins collapse and are not measured
+ * the way padding is, so its idea of where each line sits drifted from where the browser drew it.
+ *
+ * It presented as the formatting bar failing to light for a word the caret was supposedly inside,
+ * on both engines. That test was the only thing standing between this and a shipped editor where
+ * clicking near a heading lands somewhere else.
+ */
+.cm-soil-h1,
+.cm-soil-h2,
+.cm-soil-h3,
+.cm-soil-h4,
+.cm-soil-h5,
+.cm-soil-h6 {
+  padding-block: var(--editor-heading-margin);
+}
+
+/* --- Inline ---------------------------------------------------------------------------------- */
+.cm-soil-em { font-style: italic; }
+.cm-soil-strong { font-weight: 600; }
+.cm-soil-strike { text-decoration: line-through; color: var(--text-muted); }
+
+.cm-soil-code {
+  font-family: var(--font-mono);
+  font-size: var(--editor-code-size);
+  background: var(--editor-code-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+}
+
+/* --- Blocks ---------------------------------------------------------------------------------- */
+.cm-soil-quote {
+  border-left: var(--editor-blockquote-border) solid var(--border-primary);
+  /* The theme's 15px, not an em: it should not grow with the quote's own type size. */
+  padding-left: 15px;
+  color: var(--text-secondary);
+}
+
+/*
+ * A fenced block, on the theme's terms: barely off the page, bordered, and 0.9em rather than 0.85.
+ * `padding-block` and not margin, for the reason the heading spacing above records — margins on a
+ * line break CodeMirror's click-to-caret mapping.
+ */
+.cm-soil-fence {
+  font-family: var(--font-mono);
+  font-size: var(--editor-code-size);
+  background: var(--editor-code-surface);
+  border-inline: 1px solid var(--border-primary);
+  padding-inline: 12px;
+}
+
+/*
+ * **The block's two ends, which are what make it a box rather than a column.**
+ *
+ * A line decoration styles one line, so `border-inline` alone leaves a fenced block open at the top
+ * and bottom. These land on exactly one line each — see `BLOCK_ENDS` in the planner — and they are
+ * also what made concealing the backticks safe: the border now says where the code begins and ends,
+ * which is the job the backticks used to do.
+ *
+ * `padding`, never `margin`. Margins on `.cm-line` break CodeMirror's click-to-caret mapping — the
+ * caret lands on a different line than the one clicked. That cost a round on the heading spacing.
+ *
+ * Radius on the corner properties rather than the shorthand, so the side borders stay square where
+ * the two classes meet on a one-line block.
+ */
+.cm-soil-fence-top {
+  border-top: 1px solid var(--border-primary);
+  border-start-start-radius: 3px;
+  border-start-end-radius: 3px;
+  padding-top: 8px;
+}
+
+.cm-soil-fence-bottom {
+  border-bottom: 1px solid var(--border-primary);
+  border-end-start-radius: 3px;
+  border-end-end-radius: 3px;
+  padding-bottom: 8px;
+}
+
+/*
+ * The language label. Typora shows it; with the backticks gone it would otherwise read as a stray
+ * word on the first line of the code, so it is set as a label instead — small, dim, and clearly not
+ * part of the program.
+ */
+.cm-soil-fence-lang {
+  font-size: 0.85em;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+/*
+ * The bullet drawn where a list's `-` sits. Added 2026-08-26.
+ *
+ * **No width, and the two attempts to give it one are the reason this comment is long.**
+ *
+ * The first version set `display: inline-block; width: 1ch` under a comment claiming it kept the
+ * caret mapping honest — that a glyph measuring differently from the character it covers would put
+ * every position after it on the line in the wrong place. **Measured: false.** Widening it to `4ch`
+ * left every test green, because CodeMirror maps coordinates through a replaced range's real screen
+ * extent and does not care what that extent is.
+ *
+ * The second claim was that `1ch` matched the dash, so text would not shift when the caret entered
+ * the line and revealed the raw marker. **Also measured, also false:** `1ch` is the width of a zero,
+ * which in Open Sans is 4.6px wider than a hyphen — so the constraint was actively causing the shift
+ * it was written to prevent.
+ *
+ * There is no CSS length meaning "as wide as a hyphen", and chasing one would be solving a problem
+ * this editor does not have: **a line shifting slightly as it reveals its own syntax is inherent to
+ * the reveal design and already true of every heading**, where `# ` disappears entirely. A bullet
+ * moving by a fraction of a character is the mildest instance of a behaviour the operator has been
+ * looking at since P6 without remarking on it.
+ *
+ * **Size and colour, and both came from looking rather than from reasoning.** The first version was
+ * colour alone at `--text-secondary`, and on screen the bullets were specks — `•` is a small glyph
+ * in Open Sans, and dimming it to punctuation weight finished the job. Typora's are solid dots you
+ * read as structure. `1.25em` and the secondary tone together land in the same place.
+ */
+.cm-soil-bullet {
+  font-size: 0.6em;
+  line-height: 1;
+  vertical-align: 0.12em;
+  color: var(--text-secondary);
+}
+
+/*
+ * The task-list checkbox drawn over `[ ]` or `[x]`. Added 2026-08-26 — the operator: *"checkboxes still
+ * x's."*
+ *
+ * Sized like the bullet and for the same reason it took two tries there: the glyphs `☐` and `☑` are
+ * drawn small in a text face, so they need lifting to read as controls rather than as punctuation.
+ *
+ * **Drawn, not clickable.** Ticking one means editing the line, as with every other construct here.
+ * See the planner for why that is a decision rather than an omission.
+ */
+.cm-soil-task {
+  font-size: 1.15em;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+
+/* A ticked box reads as done, so it takes the accent rather than the quiet tone. */
+.cm-soil-task-done {
+  color: var(--accent-teal);
+}
+
+/*
+ * §12: "Tables: styled monospace. Aligned, monospaced, edited as pipes. No editable grid in v1 — a
+ * grid is the one feature that would reintroduce markdown regeneration."
+ *
+ * `tabular-nums` and a monospace face are what make the pipes line up without anything touching the
+ * document. The alignment is a rendering property, not a rewrite.
+ */
+/*
+ * **Brought up to full reading contrast, 2026-08-26.**
+ *
+ * It was 0.85em in `--text-secondary` — dimmer and smaller than the prose around it, which made a
+ * table read as a footnote. Typora's is neither: its table text is the same weight and colour as
+ * everything else, in a real bordered grid.
+ *
+ * The grid is the part we cannot have, and that is a design ruling rather than a gap: drawing cells
+ * would mean regenerating the markdown, which is the one thing this editor may never do. So the
+ * columns line up by monospace and `tabular-nums`, and the least we can do is let the text be as
+ * readable as the paragraph above it.
+ */
+.cm-soil-table {
+  font-family: var(--font-mono);
+  font-size: var(--editor-code-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/*
+ * --- Frontmatter -----------------------------------------------------------------------------
+ *
+ * A collapsed properties block. **Never a thematic break plus a setext heading** — that is what the
+ * old app rendered 944 files as, and it is also, exactly, what the markdown parser reports this
+ * block to be. The editor overrides the parse; this is what the override looks like.
+ */
+/*
+ * The properties strip. **0.9em and readable**, where it was 0.8em in `--text-dim` on the darkest
+ * ground in the palette — which is what the operator was pointing at when they said the box looked small
+ * and too grey. It is metadata, so it stays quieter than prose; quieter is not the same as squinting.
+ */
+.cm-soil-frontmatter {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--editor-code-size);
+  color: var(--text-secondary);
+  background: var(--editor-code-surface);
+  border-left: 2px solid var(--border-primary);
+  border-radius: 3px;
+  padding: 0.5em 0.8em;
+}
+
+/*
+ * --- The formatting bar ------------------------------------------------------------------------
+ *
+ * Annex §C: zero emoji in UI. The labels are text, which also means they survive at any font size
+ * and read correctly to a screen reader without a label attribute doing the real work.
+ */
+.format-bar {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+  overflow-x: auto;
+}
+
+.format-bar-button {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-system);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1;
+  padding: 6px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.format-bar-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.format-bar-button:focus-visible {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 2px var(--accent-teal-soft);
+}
+
+/* Lit when the caret is inside that format. Same predicate the button applies — see format-bar.ts. */
+.format-bar-button.is-active {
+  background: var(--accent-teal-soft);
+  border-color: var(--accent-teal-dim);
+  color: var(--text-primary);
+}

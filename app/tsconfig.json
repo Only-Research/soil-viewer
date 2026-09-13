@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["node", "vitest/globals"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    // Node 24 runs TypeScript directly by stripping types, and its ESM resolver requires an
+    // explicit file extension on a relative import. Without this flag a module cannot be both
+    // a runnable command (`node test/support/mock-soil/cli.ts`) and a typechecked import — see
+    // that directory. Safe here because `noEmit` is on: nothing is ever emitted with a `.ts`
+    // specifier still in it.
+    "allowImportingTsExtensions": true,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  // `test/harness/results.d.cts` is the harness's shared result schema — the `.cjs` modules stay
+  // JavaScript, but every TypeScript reader of them is checked against one declaration. P5's gate
+  // found four readers each re-deriving that shape from memory, and three of them broke. It needs no
+  // entry of its own now that the harness sits under `test/`, which is already included.
+  "include": ["src", "test", "*.config.ts"]
+}

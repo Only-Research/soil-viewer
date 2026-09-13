@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Soil Viewer — round-trip harness</title>
+    <!--
+      The instrument's page. Not part of the app: it is never linked from the shell and it carries
+      no session, no stream and no routes. Its only job is to give the P5 harness a browser context
+      in which the REAL editor exists.
+
+      It is deliberately its own entry rather than a flag on the app's, so that nothing the harness
+      needs can leak into what the operator runs, and nothing the app does — a stream reconnecting, a
+      toast, a boundary re-render — can perturb a measurement.
+    -->
+  </head>
+  <body>
+    <script type="module" src="/harness-entry.ts"></script>
+  </body>
+</html>
