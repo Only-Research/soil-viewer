@@ -232,3 +232,7 @@ The byte-fidelity gate is the one worth knowing about. It puts every file in the
 ## A note on the comments
 
 The source carries unusually long explanatory comments. They are deliberate: most record *why* a control is shaped the way it is, and many record a specific way an earlier version was wrong. Where a comment claims a control works, there is generally a test that fails if it stops working. They are the most useful thing in the repository and the first thing to read before changing anything.
+
+## License
+
+MIT — see `LICENSE`. Copyright 2026 Only Research LLC.

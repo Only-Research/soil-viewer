@@ -2,6 +2,7 @@
   "name": "soil-viewer",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "description": "A local-first workspace over a folder tree of markdown files. The tree is the state: a task's status is the folder it sits in, and the editor returns every file byte-identical.",
   "keywords": [
     "markdown",
