@@ -34,8 +34,9 @@ To reach it from your phone over Tailscale, set your Mac's Tailscale name in the
 
     SOIL_TAILNET_HOST=your-mac.your-tailnet.ts.net npm run always-on
 
-and publish the port with `tailscale serve` — the README's environment table names the variables.
-Check it took:
+and publish the port with `tailscale serve`. The README's section "Reaching it from your phone" has
+the whole of it — the certificate switch that is off by default, the exact `serve` command, and the
+rule that the name and port must match what `serve` publishes. Check the install took:
 
     launchctl print gui/$(id -u)/com.soilviewer.server | head -20
 

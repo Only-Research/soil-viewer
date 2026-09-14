@@ -21,12 +21,19 @@ export interface BannerInput {
   readonly tokenPath: string
 }
 
+/**
+ * The two listener lines are labelled by what a person does with them, not by the listener's internal
+ * name. Until 2026-09-13 the app's line was labelled `tailnet`, and a reader took `tailnet
+ * http://127.0.0.1:8766` for the phone address — it is the loopback port that `tailscale serve`
+ * fronts, and the phone address is whatever `serve` publishes. Only the `tokens` line is parsed by
+ * anything (`test/harness/server.ts`); the labels are free to say the true thing.
+ */
 export function startupBanner(input: BannerInput): string {
   return (
     'soil-viewer\n' +
-    `  local   http://${input.host}:${input.portLocal}\n` +
-    `  tailnet http://${input.host}:${input.portTailnet}\n` +
-    `  build   ${input.buildStamp}\n` +
-    `  tokens  ${input.tokenPath}\n`
+    `  app         http://${input.host}:${input.portTailnet}   open this one; tailscale serve fronts it for a phone\n` +
+    `  privileged  http://${input.host}:${input.portLocal}   serves no page — 405 in a browser, by design\n` +
+    `  build       ${input.buildStamp}\n` +
+    `  tokens      ${input.tokenPath}\n`
   )
 }

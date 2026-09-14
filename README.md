@@ -82,9 +82,8 @@ close the window and it stops. From a terminal the same thing is `npm run open`.
 macOS may refuse to open a `.command` file downloaded from the internet the first time ("cannot be
 opened because it is from an unidentified developer"). Right-click it and choose Open, once.
 
-**On a phone,** over Tailscale, open the app in Safari and use Share → Add to Home Screen. It installs
-as a standalone app with its own icon and no browser chrome — the manifest and icons for that are
-already in the build.
+**On a phone** it is the same server reached over Tailscale, which takes a setup of its own — the
+section "Reaching it from your phone" below has all of it. Nothing about the Mac-only path needs it.
 
 ## Keeping it running at login (optional)
 
@@ -98,13 +97,90 @@ npm run always-on
 That writes a user LaunchAgent for this machine (Node's location, this folder, the state directory),
 loads it, and waits for the app to answer. From then on it starts at login and comes back if it ever
 stops. `npm run always-on:restart` restarts it; `npm run always-on:off` unloads it and moves its file
-aside — nothing is deleted. To reach it from your phone, set `SOIL_TAILNET_HOST` before the install
-command and publish the port with `tailscale serve`.
+aside — nothing is deleted. If the phone is part of the plan, read the next section **before** running
+the install command: the Mac's Tailscale name has to be in the environment at install time.
 
 One honest consequence, stated here rather than discovered: with FileVault on, the app returns after a
 reboot **once you have unlocked the disk**, not after the reboot alone. `app/ops/README.md` has the
 rest — where the logs are, why an environment change needs a reload rather than a restart, and the
 gotchas.
+
+## Reaching it from your phone (optional) — the Tailscale setup
+
+You do not need any of this to use the app on your Mac. It is for reaching the same server from your
+phone, and it is written so you can hand it whole to whoever — or whatever — sets your machine up.
+
+The app never speaks HTTPS itself. It listens on the Mac's own loopback address, in plain HTTP, and
+nothing else. **Tailscale provides the HTTPS**, and the phone needs HTTPS: iPhone Safari treats a
+plain-http page as insecure and withholds the clipboard, the service worker and a real Add to Home
+Screen. Tailnet traffic is encrypted either way — HTTPS here is about the phone browser's rules, not
+secrecy.
+
+**Before anything, three things have to be true:**
+
+1. **Tailscale is installed and signed in on both the Mac and the phone**, on the same tailnet.
+2. **HTTPS Certificates are enabled for your tailnet.** This is a switch in the Tailscale admin console,
+   under DNS, and it is **off by default**; MagicDNS has to be on for it. Check from the Mac with
+   `tailscale status --json` — if `"CertDomains"` is `null`, it is not enabled, and `tailscale serve`
+   publishes nothing until it is.
+3. **You know your Mac's MagicDNS name** — `your-mac.your-tailnet.ts.net`, lowercase, shown by
+   `tailscale status` and in the admin console. The app refuses any request not addressed to exactly
+   this name.
+
+On a Mac where `tailscale` is not on the PATH, the command lives inside the app:
+`/Applications/Tailscale.app/Contents/MacOS/Tailscale`.
+
+**Publish the port — once; it persists:**
+
+```
+tailscale serve --bg 8766
+```
+
+That publishes `https://your-mac.your-tailnet.ts.net` (port 443) to your tailnet only and forwards it
+to the app on 8766; Tailscale terminates the HTTPS with a certificate it issues for your Mac.
+`tailscale serve status` shows it. The configuration lives in Tailscale's own state, not in this
+repository — it survives reboots, and nothing here re-creates it if it is removed. Two things to know:
+
+- **Never run `tailscale serve reset`.** It removes every published service on the machine, not just
+  this one. To remove only this: `tailscale serve --https=443 off`.
+- **This is `serve`, not `funnel`.** `serve` is tailnet-only. `funnel` would put the app on the public
+  internet; the app is not built for that and must never be exposed that way.
+
+**If port 443 is already in use on your Mac** — another `serve` mount, say — pick another port and
+carry it into the next step:
+
+```
+tailscale serve --bg --https=8443 8766
+```
+
+The phone address then carries the port: `https://your-mac.your-tailnet.ts.net:8443`.
+
+**Tell the app its name.** The server refuses any request whose Host is not one it knows — that is
+the security model, not a setting to loosen — so it has to be told the MagicDNS name, and the port if
+you changed it. Both have to be in the environment when the server starts, which for always-on means
+at install time:
+
+```
+SOIL_TAILNET_HOST=your-mac.your-tailnet.ts.net npm run always-on
+```
+
+With a non-default port, add `SOIL_TAILNET_SERVE_PORT=8443` in front of the same command. Running by
+hand instead, the same variables go in front of `npm run serve`. **The name and port must match what
+`serve` publishes, exactly.** A mismatch is refused as a bad host, and `~/.soil-viewer/local.log`
+says so. To change either later: `npm run always-on:off`, then `npm run always-on` again — a restart
+keeps the old environment, only a reload takes the new one.
+
+**On the phone:** open `https://your-mac.your-tailnet.ts.net` (with the port, if you set one) in
+Safari, then Share → Add to Home Screen. It installs as a standalone app with its own icon and no
+browser chrome — the manifest and icons for that are already in the build. Installing it is not
+cosmetic: a plain Safari tab on a phone loses its unsaved-edit buffer after seven idle days; a Home
+Screen install keeps it.
+
+**What this does and does not change.** Only devices on your tailnet can reach it. The app still sees
+only the folders you registered. The startup banner's `app` line — `http://127.0.0.1:8766` — is the
+local port that `serve` fronts, not the phone address. The Mac has to be awake: asleep, the phone gets
+nothing (screen lock is fine, sleep is not). With FileVault on, after a reboot the app returns once you
+have unlocked the disk.
 
 ## Repository layout
 
