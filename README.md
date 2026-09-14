@@ -8,16 +8,11 @@ It runs as a small server on your own machine and is used from a browser — des
 
 ## Design commitments
 
-- **Your files come back exactly as you left them.** The editor holds the file's real text and paints formatting over it rather than parsing to a document model and writing back. Enforced in CI on every push to `main` and every pull request: the full corpus round-trips
-  **100% byte-identical** through both browser engines, checked against three deliberately lossy
-  editors that must each be caught. Documentation-only commits skip CI, so the claim is about
+- **Your files come back exactly as you left them.** The editor holds the file's real text and paints formatting over it rather than parsing to a document model and writing back. Enforced in CI on every push to `main` and every pull request: the full corpus round-trips **100% byte-identical** through both browser engines, checked against three deliberately lossy editors that must each be caught. Documentation-only commits skip CI, so the claim is about
   every change to the code rather than literally every commit.
 - **There is no delete.** No menu item, no keystroke and no route removes a file or a folder. The
   row menu offers New file, New folder, Rename, Duplicate, Move, Copy path and Reveal in Finder —
-  plus one "New <template>" entry per registered template, and nothing else; removing a folder from the app removes it from a list, not from your disk. Two things
-  qualify that, stated here because a safety claim needing a footnote should carry its own: an edit
-  that deletes text is still your edit and is still saved — though a save removing most of a file
-  raises a dialog naming the byte count first — and resolving an edit conflict does remove the
+  plus one "New <template>" entry per registered template, and nothing else; removing a folder from the app removes it from a list, not from your disk. Two things qualify that, stated here because a safety claim needing a footnote should carry its own: an edit that deletes text is still your edit and is still saved — though a save removing most of a file raises a dialog naming the byte count first — and resolving an edit conflict does remove the
   original, but only after its bytes are archived, fsynced, **read back and hash-compared**, leaving
   the original untouched if they disagree.
 - **The server has no third-party runtime dependencies.** It is Node's standard library and nothing else. The browser bundle is built from source by `npm run build`; its dependencies are build-time only and never reach the server.
@@ -25,7 +20,8 @@ It runs as a small server on your own machine and is used from a browser — des
 
 ## Requirements
 
-**macOS, and Node 24 or newer.**
+**macOS, and Node 24 or newer.** Node comes from [nodejs.org](https://nodejs.org) — the LTS download
+is fine — or from Homebrew with `brew install node`. `node -v` in a terminal tells you what you have.
 
 The macOS part is not incidental and is stated here rather than discovered later. "Reveal in Finder"
 shells out to `/usr/bin/open` with no fallback and no platform check; the case-sensitivity probe, the
